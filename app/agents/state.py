@@ -1,0 +1,43 @@
+"""LangGraph agent state definition.
+
+Thread-keyed by wa_id so each customer's conversation is independent.
+State is serialised by the Postgres checkpointer between webhook calls.
+"""
+from __future__ import annotations
+
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
+
+
+class AgentState(TypedDict):
+    # Full conversation history — managed by the add_messages reducer
+    messages: Annotated[list[BaseMessage], add_messages]
+
+    # Customer identity (populated by ingest node)
+    wa_id: str
+    customer_id: int
+    crm_stage: str
+
+    # Determines which backend catalog/order tools use
+    commerce_mode: str  # "whatsapp_only" | "website"
+
+    # Inbound image media_id waiting for OCR (set when a receipt image arrives)
+    pending_media_id: str | None
+
+    # Most recently created order reference (so CRM tool can attach it)
+    last_order_ref: str | None
+
+    # Customer's saved delivery address (loaded from DB at ingest time)
+    customer_delivery_address: str | None
+
+    # Admin-configured bank transfer details (account number, IBAN, bank name, etc.)
+    bank_transfer_details: str | None
+
+    # Customer's display name from WhatsApp profile (for personalised replies)
+    customer_name: str | None
+
+    # Admin-configured business identity (name + description of what the shop sells)
+    business_name: str | None
+    business_description: str | None

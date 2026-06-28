@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Environment secrets — NEVER commit .env
+.env
+.env.local
+.env.*.local
+
+# Alembic SQLite dev DB
+*.db
+*.sqlite3
+
+# Mypy / Pyright
+.mypy_cache/
+pyrightconfig.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
