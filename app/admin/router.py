@@ -12,7 +12,9 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db.base import get_db
+from app.dependencies import get_authenticated_tenant_id, require_superadmin
 
 _UPLOADS_DIR = pathlib.Path("static/uploads")
 _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -25,6 +27,24 @@ _ALLOWED_MIME = {
 }
 
 router = APIRouter(tags=["admin"])
+
+
+async def _audit(db: AsyncSession, *, tenant_id: int, action: str, **detail) -> None:
+    """Record a sensitive admin action to the append-only events table."""
+    from app.db.crud import create_event
+    from app.db.models import EventType
+    await create_event(
+        db, EventType.admin_action, tenant_id=tenant_id, payload={"action": action, **detail}
+    )
+
+
+def _redact_setting_value(key: str, value: str) -> str:
+    """Never write credential-bearing setting values into the audit log."""
+    from app.crypto import is_sensitive_setting_key
+
+    if is_sensitive_setting_key(key):
+        return "[REDACTED]"
+    return value
 
 
 class StockUpdate(BaseModel):
@@ -74,8 +94,45 @@ class NewProduct(BaseModel):
         return v
 
 
+class ProductEdit(BaseModel):
+    """Editable product fields. All optional — only provided fields change.
+    Stock and media (image/video) have their own dedicated endpoints."""
+    name: str | None = None
+    description: str | None = None
+    price: Decimal | None = None
+    tags: list[str] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_nonempty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("Name cannot be empty")
+        return v.strip() if v is not None else v
+
+    @field_validator("price")
+    @classmethod
+    def price_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError("Price must be greater than zero")
+        return v
+
+
 class CancelOrderBody(BaseModel):
     reason: str | None = None
+
+
+class TenantCreate(BaseModel):
+    name: str
+    whatsapp_number: str | None = None
+    phone_number_id: str | None = None
+    status: str = "active"
+
+
+class TenantUpdate(BaseModel):
+    name: str | None = None
+    whatsapp_number: str | None = None
+    phone_number_id: str | None = None
+    status: str | None = None
 
 
 @router.post("/admin/orders/{order_ref}/cancel")
@@ -83,6 +140,7 @@ async def admin_cancel_order(
     order_ref: str,
     body: CancelOrderBody = Body(default=None),
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Cancel an order (admin-initiated). Works for any status including paid.
     Paid order cancellations auto-create a refund request and notify the customer.
@@ -101,7 +159,8 @@ async def admin_cancel_order(
 
     _log = _get_logger(__name__)
 
-    order = await get_order_by_ref(db, order_ref)
+    _tid = tenant_id
+    order = await get_order_by_ref(db, order_ref, tenant_id=_tid)
     if order is None:
         raise HTTPException(status_code=404, detail=f"Order '{order_ref}' not found")
 
@@ -121,6 +180,8 @@ async def admin_cancel_order(
             await record_stage_change(db, customer, CRMStage.interested)
             await update_customer(db, customer, crm_stage=CRMStage.interested)
             crm_changed = True
+
+    await _audit(db, tenant_id=_tid, action="cancel_order", order_ref=order_ref, was_paid=was_paid)
 
     # Commit the cancel + CRM update FIRST so the order status is persisted
     # regardless of what happens next (refund creation, notification).
@@ -143,6 +204,7 @@ async def admin_cancel_order(
                         customer_id=customer.id,
                         order_ref=order_ref,
                         reason=cancel_reason,
+                        tenant_id=order.tenant_id,
                     )
             refund_created = True
         except Exception as exc:
@@ -197,9 +259,9 @@ class SettingUpdate(BaseModel):
 
 
 @router.get("/admin/settings/{key}")
-async def get_admin_setting(key: str, db: AsyncSession = Depends(get_db)) -> dict:
+async def get_admin_setting(key: str, db: AsyncSession = Depends(get_db), tenant_id: int = Depends(get_authenticated_tenant_id)) -> dict:
     from app.db.crud import get_setting
-    value = await get_setting(db, key)
+    value = await get_setting(db, key, tenant_id=tenant_id)
     return {"key": key, "value": value}
 
 
@@ -208,11 +270,94 @@ async def put_admin_setting(
     key: str,
     body: SettingUpdate,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     from app.db.crud import upsert_setting
-    await upsert_setting(db, key, body.value)
+    await upsert_setting(db, key, body.value, tenant_id=tenant_id)
+    await _audit(db, tenant_id=tenant_id, action="update_setting", key=key, value=_redact_setting_value(key, body.value))
     await db.commit()
     return {"key": key, "value": body.value}
+
+
+@router.post("/admin/whatsapp/connect")
+async def connect_whatsapp(tenant_id: int = Depends(get_authenticated_tenant_id)) -> dict:
+    """Start (or resume) this tenant's WhatsApp session on the bridge.
+
+    Safe to call repeatedly — the bridge no-ops if a session already exists,
+    regardless of its status. This is the CRM-side trigger that replaces
+    needing terminal access to the bridge process to pair a number.
+    """
+    import httpx
+
+    settings = get_settings()
+    headers = {"X-Bridge-Token": settings.WA_BRIDGE_TOKEN} if settings.WA_BRIDGE_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(f"{settings.WA_BRIDGE_URL}/connect/{tenant_id}", headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"wa-bridge unreachable: {exc}") from exc
+
+
+@router.post("/admin/whatsapp/disconnect")
+async def disconnect_whatsapp(
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Disconnect this tenant's WhatsApp: logs the device out and wipes the
+    saved session so the agent stops receiving messages. Reconnecting later
+    needs a fresh QR scan."""
+    import httpx
+
+    settings = get_settings()
+    headers = {"X-Bridge-Token": settings.WA_BRIDGE_TOKEN} if settings.WA_BRIDGE_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(f"{settings.WA_BRIDGE_URL}/disconnect/{tenant_id}", headers=headers)
+            resp.raise_for_status()
+            result = resp.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"wa-bridge unreachable: {exc}") from exc
+
+    await _audit(db, tenant_id=tenant_id, action="whatsapp_disconnect")
+    await db.commit()
+    return result
+
+
+@router.get("/admin/whatsapp/status")
+async def whatsapp_status(tenant_id: int = Depends(get_authenticated_tenant_id)) -> dict:
+    """This tenant's WhatsApp connection status, proxied from the bridge's /health."""
+    import httpx
+
+    settings = get_settings()
+    headers = {"X-Bridge-Token": settings.WA_BRIDGE_TOKEN} if settings.WA_BRIDGE_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{settings.WA_BRIDGE_URL}/health", headers=headers)
+            resp.raise_for_status()
+            sessions = resp.json().get("sessions", {})
+            return {"status": sessions.get(str(tenant_id), "not_connected")}
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"wa-bridge unreachable: {exc}") from exc
+
+
+@router.get("/admin/whatsapp/qr")
+async def whatsapp_qr(tenant_id: int = Depends(get_authenticated_tenant_id)) -> Response:
+    """This tenant's current pairing QR as a PNG, proxied from the bridge."""
+    import httpx
+
+    settings = get_settings()
+    headers = {"X-Bridge-Token": settings.WA_BRIDGE_TOKEN} if settings.WA_BRIDGE_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{settings.WA_BRIDGE_URL}/qr/{tenant_id}", headers=headers)
+            if resp.status_code == 404:
+                raise HTTPException(status_code=404, detail=resp.json().get("error", "no QR available"))
+            resp.raise_for_status()
+            return Response(content=resp.content, media_type="image/png")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"wa-bridge unreachable: {exc}") from exc
 
 
 @router.patch("/admin/products/{sku}/stock")
@@ -220,11 +365,12 @@ async def update_product_stock(
     sku: str,
     body: StockUpdate,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Set absolute stock level for a product. Re-activates if stock > 0, deactivates if 0."""
     from app.db.crud import get_product_by_sku, set_product_stock
 
-    product = await get_product_by_sku(db, sku)
+    product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Product '{sku}' not found")
 
@@ -244,11 +390,12 @@ async def update_product_media(
     sku: str,
     body: ProductMediaUpdate,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Set or clear image_url and video_url for a product."""
     from app.db.crud import get_product_by_sku
 
-    product = await get_product_by_sku(db, sku)
+    product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Product '{sku}' not found")
 
@@ -268,16 +415,19 @@ async def update_product_media(
 async def create_product(
     body: NewProduct,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Create a new product from the CRM dashboard."""
     from app.db.crud import get_product_by_sku
     from app.db.models import Product
 
-    existing = await get_product_by_sku(db, body.sku)
+    _tid = tenant_id
+    existing = await get_product_by_sku(db, body.sku, tenant_id=_tid)
     if existing is not None:
         raise HTTPException(status_code=409, detail=f"SKU '{body.sku}' already exists")
 
     product = Product(
+        tenant_id=_tid,
         sku=body.sku,
         name=body.name,
         description=body.description or None,
@@ -292,11 +442,64 @@ async def create_product(
     return {"sku": product.sku, "name": product.name, "stock": product.stock}
 
 
+@router.patch("/admin/products/{sku}")
+async def edit_product(
+    sku: str,
+    body: ProductEdit,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Edit product details (name, description, price, tags). Only fields
+    present in the request are changed; stock and media have own endpoints."""
+    from app.db.crud import get_product_by_sku, update_product
+
+    product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Product '{sku}' not found")
+
+    changes = body.model_dump(exclude_unset=True)
+    if "tags" in changes:
+        changes["tags"] = changes["tags"] or None
+    if "description" in changes:
+        changes["description"] = changes["description"] or None
+    await update_product(db, product, **changes)
+    await _audit(db, tenant_id=tenant_id, action="edit_product", sku=sku, fields=list(changes.keys()))
+    await db.commit()
+    return {
+        "sku": product.sku,
+        "name": product.name,
+        "description": product.description,
+        "price": str(product.price),
+        "tags": product.tags or [],
+    }
+
+
+@router.delete("/admin/products/{sku}")
+async def remove_product(
+    sku: str,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Permanently delete a product. Past orders keep their line-item snapshot."""
+    from app.db.crud import delete_product, get_product_by_sku
+
+    product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Product '{sku}' not found")
+
+    name = product.name
+    await delete_product(db, product)
+    await _audit(db, tenant_id=tenant_id, action="delete_product", sku=sku, name=name)
+    await db.commit()
+    return {"deleted": sku}
+
+
 @router.post("/admin/products/{sku}/media/upload")
 async def upload_product_media(
     sku: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Upload a product image or video from the admin's device.
 
@@ -313,7 +516,7 @@ async def upload_product_media(
             detail=f"Unsupported type '{content_type}'. Allowed: {', '.join(_ALLOWED_MIME)}",
         )
 
-    product = await get_product_by_sku(db, sku)
+    product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Product '{sku}' not found")
 
@@ -491,6 +694,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <button class="tab" onclick="showTab('settings',this)">&#9881; Settings</button>
   <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this)">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
   <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this)">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
+  <button class="tab" onclick="showTab('tenants',this)">&#127970; Tenants</button>
 </div>
 
 <!-- ORDERS TAB -->
@@ -592,9 +796,10 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
           <th>Status</th>
           <th>Update Stock</th>
           <th>Photo / Video URL</th>
+          <th>Actions</th>
         </tr>
       </thead>
-      <tbody id="inventory-body"><tr><td colspan="8" class="empty"><div class="spinner"></div></td></tr></tbody>
+      <tbody id="inventory-body"><tr><td colspan="9" class="empty"><div class="spinner"></div></td></tr></tbody>
     </table>
   </div>
 </div>
@@ -611,6 +816,31 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="panel" id="tab-settings" style="display:none">
   <div class="panel-header"><h2>Settings</h2></div>
   <div style="padding:24px;max-width:600px;display:flex;flex-direction:column;gap:28px">
+
+    <div style="border:1px solid #d1d5db;border-radius:10px;padding:20px;background:#f9fafb">
+      <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">WhatsApp Connection</label>
+      <p style="font-size:12px;color:#6b7280;margin-bottom:14px">Connect your WhatsApp number so the agent can receive and reply to messages. This links a device the same way WhatsApp Web / Desktop does — your phone keeps working normally.</p>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <span id="wa-status-badge" style="font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px;background:#e5e7eb;color:#374151">Checking…</span>
+        <button id="wa-connect-btn" onclick="connectWhatsapp()"
+                style="background:#6366f1;color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Connect WhatsApp</button>
+        <button id="wa-disconnect-btn" onclick="disconnectWhatsapp()"
+                style="display:none;background:#ef4444;color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Disconnect / Stop Agent</button>
+      </div>
+      <div id="wa-qr-wrap" style="display:none;text-align:center;padding:16px;background:#fff;border-radius:8px;border:1px solid #e5e7eb">
+        <p style="font-size:12px;color:#6b7280;margin-bottom:10px">On the phone you want to connect: open <b>WhatsApp → Settings → Linked Devices → Link a Device</b>, then scan this code:</p>
+        <img id="wa-qr-img" style="width:240px;height:240px" alt="WhatsApp pairing QR code">
+        <p id="wa-qr-hint" style="font-size:11px;color:#9ca3af;margin-top:8px">The code refreshes automatically until you scan it.</p>
+      </div>
+      <details style="margin-top:12px">
+        <summary style="font-size:12px;color:#6b7280;cursor:pointer;font-weight:600">How it works &amp; how to stop the agent</summary>
+        <div style="font-size:12px;color:#6b7280;margin-top:8px;line-height:1.6">
+          <b>Connecting:</b> Click Connect, then scan the QR with the WhatsApp number that will act as your shop. Once it shows <b>Connected</b>, the agent auto-replies to anyone who messages that number.<br>
+          <b>Stopping the agent:</b> Click <b>Disconnect / Stop Agent</b>. This logs the device out (it disappears from your phone's Linked Devices list) and the agent stops receiving messages. Reconnecting later needs a fresh QR scan.<br>
+          <b>Staying connected:</b> The session is saved, so it survives app restarts — you don't need to re-scan unless you disconnect here or unlink it from your phone.
+        </div>
+      </details>
+    </div>
 
     <div>
       <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Business Name</label>
@@ -734,6 +964,37 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<!-- TENANTS TAB (Platform / superadmin only) -->
+<div class="panel" id="tab-tenants" style="display:none">
+  <div class="panel-header">
+    <h2>Tenants</h2>
+    <span class="count" id="tenants-count">0</span>
+    <button onclick="createTenantPrompt()"
+            style="margin-left:auto;background:#4f46e5;color:#fff;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">
+      + New Tenant
+    </button>
+  </div>
+  <p style="font-size:12px;color:#6b7280;margin:0 0 10px">
+    Requires the platform superadmin key — separate from any tenant's own admin key.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>WhatsApp Number</th>
+          <th>Phone Number ID</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tenants-body"><tr><td colspan="7" class="empty"><div class="spinner"></div></td></tr></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ADD PRODUCT MODAL -->
 <div id="add-product-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -792,20 +1053,70 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<!-- EDIT PRODUCT MODAL -->
+<div id="edit-product-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="font-size:18px;font-weight:700">Edit Product</h2>
+      <button onclick="closeEditProduct()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <p style="font-size:12px;color:#6b7280;margin:-10px 0 16px">Editing stock and photo/video is done from the inventory table. Here you change name, price, description and tags.</p>
+    <form id="edit-product-form" onsubmit="submitEditProduct(event)">
+      <input type="hidden" id="ep-sku-hidden">
+      <div style="display:grid;gap:14px">
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">SKU (cannot change)</label>
+          <input id="ep-sku" type="text" disabled
+                 style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#f3f4f6;color:#6b7280">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Product Name *</label>
+          <input id="ep-name" type="text" required
+                 style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Price (PKR) *</label>
+          <input id="ep-price" type="number" min="0" step="0.01" required
+                 style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Description</label>
+          <textarea id="ep-desc" rows="3"
+                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Tags (comma-separated)</label>
+          <input id="ep-tags" type="text" placeholder="e.g. phone, electronics"
+                 style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">
+        </div>
+        <div id="edit-product-error" style="display:none;color:#dc2626;font-size:13px;font-weight:600"></div>
+        <button type="submit" id="ep-submit"
+                style="background:#6366f1;color:#fff;border:none;padding:10px;border-radius:8px;
+                       cursor:pointer;font-size:14px;font-weight:600;width:100%">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 // ---- State ----
 let allOrders = [], allCustomers = [], funnelData = [];
+let productsBySku = {};
 
 // ---- Tab switching ----
 function showTab(name, btn) {
-  ['orders','customers','inventory','funnel','settings','refunds','receipts'].forEach(t => {
+  ['orders','customers','inventory','funnel','settings','refunds','receipts','tenants'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (name === 'settings') loadSettings();
+  if (name === 'settings') { loadSettings(); refreshWaStatus(); }
+  else if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
   if (name === 'refunds') loadRefunds();
   if (name === 'receipts') loadReceipts();
+  if (name === 'tenants') loadTenants();
 }
 
 // ---- Formatting helpers ----
@@ -915,7 +1226,7 @@ async function adminCancelOrder(orderRef, isPaid) {
     if (!confirm('Cancel order ' + orderRef + '? This will restore stock and roll back the customer CRM stage.')) return;
   }
   try {
-    const resp = await fetch('/admin/orders/' + encodeURIComponent(orderRef) + '/cancel', {
+    const resp = await adminFetch('/admin/orders/' + encodeURIComponent(orderRef) + '/cancel', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({reason: reason || null}),
@@ -992,9 +1303,11 @@ function renderProducts(data) {
   document.getElementById('inventory-count').textContent = data.total + ' products';
   document.getElementById('k-oos').textContent = data.out_of_stock_count;
   document.getElementById('k-lowstock').textContent = data.low_stock_count + ' low stock (≤5)';
+  productsBySku = {};
+  data.products.forEach(p => { productsBySku[p.sku] = p; });
 
   if (!data.products.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No products — run: python -m scripts.seed</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">No products yet — click “+ Add Product”.</td></tr>';
     return;
   }
   tbody.innerHTML = data.products.map(p => {
@@ -1052,6 +1365,20 @@ function renderProducts(data) {
           </button>
         </div>
       </td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:5px;min-width:80px">
+          <button onclick="openEditProduct('${p.sku}')"
+                  style="background:#6366f1;color:#fff;border:none;padding:5px 10px;
+                         border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">
+            Edit
+          </button>
+          <button onclick="deleteProduct('${p.sku}')"
+                  style="background:#ef4444;color:#fff;border:none;padding:5px 10px;
+                         border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">
+            Delete
+          </button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1063,7 +1390,7 @@ async function updateStock(sku, safeId) {
   const newStock = parseInt(input.value, 10);
   if (isNaN(newStock) || newStock < 0) { alert('Enter a valid stock number (0 or more)'); return; }
   try {
-    const resp = await fetch('/admin/products/' + encodeURIComponent(sku) + '/stock', {
+    const resp = await adminFetch('/admin/products/' + encodeURIComponent(sku) + '/stock', {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({stock: newStock}),
@@ -1080,7 +1407,7 @@ async function uploadMediaFile(sku, safeId) {
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
   try {
-    const resp = await fetch('/admin/products/' + encodeURIComponent(sku) + '/media/upload', {method:'POST', body:fd});
+    const resp = await adminFetch('/admin/products/' + encodeURIComponent(sku) + '/media/upload', {method:'POST', body:fd});
     const data = await resp.json();
     if (!resp.ok) { alert('Upload error: ' + (data.detail || resp.status)); return; }
     fileInput.value = '';
@@ -1097,7 +1424,7 @@ async function updateMedia(sku, safeId) {
     video_url: vidEl.value.trim() || null,
   };
   try {
-    const resp = await fetch('/admin/products/' + encodeURIComponent(sku) + '/media', {
+    const resp = await adminFetch('/admin/products/' + encodeURIComponent(sku) + '/media', {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
@@ -1114,21 +1441,107 @@ function applyOrderFilter() {
   const qs = new URLSearchParams({per_page: 200});
   if (status) qs.set('status', status);
   if (pay)    qs.set('payment_method', pay);
-  fetch('/analytics/orders?' + qs).then(r => r.json()).then(renderOrders);
+  adminFetch('/analytics/orders?' + qs).then(r => r.json()).then(renderOrders);
 }
 
 function applyCustomerFilter() {
   const stage = document.getElementById('cust-stage-filter').value;
   const qs = new URLSearchParams({per_page: 200});
   if (stage) qs.set('stage', stage);
-  fetch('/analytics/customers?' + qs).then(r => r.json()).then(renderCustomers);
+  adminFetch('/analytics/customers?' + qs).then(r => r.json()).then(renderCustomers);
+}
+
+// ---- WhatsApp connection ----
+let waPollTimer = null;
+
+function setWaBadge(status) {
+  const badge = document.getElementById('wa-status-badge');
+  const map = {
+    ready: ['Connected', '#16a34a', '#dcfce7'],
+    qr_pending: ['Scan QR to connect', '#b45309', '#fef3c7'],
+    disconnected: ['Reconnecting…', '#b45309', '#fef3c7'],
+    logged_out: ['Disconnected — reconnect', '#dc2626', '#fee2e2'],
+    not_connected: ['Not connected', '#374151', '#e5e7eb'],
+    starting: ['Starting…', '#374151', '#e5e7eb'],
+    error: ['Status unavailable', '#dc2626', '#fee2e2'],
+  };
+  const [text, color, bg] = map[status] || [status, '#374151', '#e5e7eb'];
+  badge.textContent = text;
+  badge.style.color = color;
+  badge.style.background = bg;
+  // Connect vs Disconnect visibility: once there's a live/pairing session,
+  // offer Disconnect; when fully off, offer Connect.
+  const connectBtn = document.getElementById('wa-connect-btn');
+  const disconnectBtn = document.getElementById('wa-disconnect-btn');
+  const connected = ['ready', 'qr_pending', 'disconnected', 'starting'].includes(status);
+  connectBtn.style.display = connected ? 'none' : '';
+  disconnectBtn.style.display = connected ? '' : 'none';
+  if (status === 'ready') {
+    document.getElementById('wa-qr-wrap').style.display = 'none';
+    if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+  }
+}
+
+async function refreshWaStatus() {
+  try {
+    const r = await adminFetch('/admin/whatsapp/status');
+    const data = await r.json();
+    setWaBadge(data.status);
+    return data.status;
+  } catch (e) {
+    setWaBadge('error');
+    return 'error';
+  }
+}
+
+async function loadWaQr() {
+  try {
+    const r = await adminFetch('/admin/whatsapp/qr');
+    if (!r.ok) return; // no QR yet (e.g. session still starting) — next poll tick retries
+    const blob = await r.blob();
+    document.getElementById('wa-qr-img').src = URL.createObjectURL(blob);
+    document.getElementById('wa-qr-wrap').style.display = '';
+  } catch (e) { /* transient — next poll tick retries */ }
+}
+
+async function connectWhatsapp() {
+  const btn = document.getElementById('wa-connect-btn');
+  btn.disabled = true;
+  try {
+    await adminFetch('/admin/whatsapp/connect', { method: 'POST' });
+  } catch (e) {
+    setWaBadge('error');
+  }
+  btn.disabled = false;
+
+  if (waPollTimer) clearInterval(waPollTimer);
+  waPollTimer = setInterval(async () => {
+    const status = await refreshWaStatus();
+    if (status === 'qr_pending') loadWaQr();
+  }, 3000);
+  const status = await refreshWaStatus();
+  if (status === 'qr_pending') loadWaQr();
+}
+
+async function disconnectWhatsapp() {
+  if (!confirm('Disconnect WhatsApp and stop the agent?\\n\\nThe agent will stop receiving and replying to messages. Reconnecting later requires scanning a new QR code.')) return;
+  const btn = document.getElementById('wa-disconnect-btn');
+  btn.disabled = true; btn.textContent = 'Disconnecting…';
+  try {
+    const r = await adminFetch('/admin/whatsapp/disconnect', { method: 'POST' });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); alert('Error: ' + (d.detail || r.status)); }
+  } catch (e) { alert('Request failed: ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Disconnect / Stop Agent';
+  if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+  document.getElementById('wa-qr-wrap').style.display = 'none';
+  await refreshWaStatus();
 }
 
 // ---- Settings tab ----
 async function loadSettings() {
   try {
     const keys = ['business_name','business_description','delivery_charge','delivery_estimate_days','bank_transfer_details'];
-    const results = await Promise.all(keys.map(k => fetch('/admin/settings/'+k).then(r=>r.json())));
+    const results = await Promise.all(keys.map(k => adminFetch('/admin/settings/'+k).then(r=>r.json())));
     const map = {};
     keys.forEach((k,i) => { map[k] = results[i].value || ''; });
     document.getElementById('setting-business-name').value = map.business_name;
@@ -1143,7 +1556,7 @@ async function saveSetting(key, inputId, statusId) {
   const val = document.getElementById(inputId).value;
   const statusEl = document.getElementById(statusId);
   try {
-    const r = await fetch('/admin/settings/' + key, {
+    const r = await adminFetch('/admin/settings/' + key, {
       method: 'PUT', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({value: val}),
     });
@@ -1194,7 +1607,7 @@ async function submitAddProduct(e) {
   };
 
   try {
-    const resp = await fetch('/admin/products', {
+    const resp = await adminFetch('/admin/products', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
@@ -1207,7 +1620,7 @@ async function submitAddProduct(e) {
     if (fileInput.files.length) {
       const fd = new FormData();
       fd.append('file', fileInput.files[0]);
-      const ur = await fetch('/admin/products/' + encodeURIComponent(data.sku) + '/media/upload', {method:'POST', body:fd});
+      const ur = await adminFetch('/admin/products/' + encodeURIComponent(data.sku) + '/media/upload', {method:'POST', body:fd});
       if (!ur.ok) { const ue = await ur.json(); console.warn('Media upload failed:', ue.detail); }
     }
 
@@ -1219,6 +1632,62 @@ async function submitAddProduct(e) {
   }
   btn.disabled = false;
   btn.textContent = 'Create Product';
+}
+
+// ---- Edit Product modal ----
+function openEditProduct(sku) {
+  const p = productsBySku[sku];
+  if (!p) return;
+  document.getElementById('edit-product-overlay').style.display = 'flex';
+  document.getElementById('edit-product-error').style.display = 'none';
+  document.getElementById('ep-sku').value = p.sku;                 // read-only display
+  document.getElementById('ep-sku-hidden').value = p.sku;
+  document.getElementById('ep-name').value = p.name || '';
+  document.getElementById('ep-desc').value = p.description || '';
+  document.getElementById('ep-price').value = p.price;
+  document.getElementById('ep-tags').value = (p.tags || []).join(', ');
+}
+
+function closeEditProduct() {
+  document.getElementById('edit-product-overlay').style.display = 'none';
+}
+
+async function submitEditProduct(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('edit-product-error');
+  const btn = document.getElementById('ep-submit');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const sku = document.getElementById('ep-sku-hidden').value;
+  const tagsRaw = document.getElementById('ep-tags').value.trim();
+  const body = {
+    name: document.getElementById('ep-name').value.trim(),
+    description: document.getElementById('ep-desc').value.trim(),
+    price: parseFloat(document.getElementById('ep-price').value),
+    tags: tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [],
+  };
+  try {
+    const resp = await adminFetch('/admin/products/' + encodeURIComponent(sku), {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { errEl.textContent = data.detail || 'Error ' + resp.status; errEl.style.display=''; btn.disabled=false; btn.textContent='Save Changes'; return; }
+    closeEditProduct();
+    await loadAll();
+  } catch(err) { errEl.textContent = err.message; errEl.style.display=''; }
+  btn.disabled = false; btn.textContent = 'Save Changes';
+}
+
+async function deleteProduct(sku) {
+  const p = productsBySku[sku];
+  const label = p ? (p.name + ' (' + sku + ')') : sku;
+  if (!confirm('Delete “' + label + '” permanently?\\n\\nPast orders keep their record. This cannot be undone.')) return;
+  try {
+    const resp = await adminFetch('/admin/products/' + encodeURIComponent(sku), {method: 'DELETE'});
+    if (!resp.ok) { const d = await resp.json().catch(()=>({})); alert('Error: ' + (d.detail || resp.status)); return; }
+    await loadAll();
+  } catch(err) { alert('Request failed: ' + err.message); }
 }
 
 // ---- Refunds ----
@@ -1285,7 +1754,7 @@ async function approveRefund(id, orderRef) {
   const label = orderRef ? 'order ' + orderRef : 'refund #' + id;
   if (!confirm('Approve refund for ' + label + '?\\nCustomer will be notified that payment will be reversed within 24 hours.')) return;
   try {
-    const r = await fetch('/admin/refund-requests/' + id + '/approve', {method: 'PATCH'});
+    const r = await adminFetch('/admin/refund-requests/' + id + '/approve', {method: 'PATCH'});
     const data = await r.json();
     if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
     alert('Refund approved! Customer notified: ' + (data.customer_notified ? 'Yes' : 'Window expired'));
@@ -1298,7 +1767,7 @@ async function rejectRefund(id, orderRef) {
   const reason = prompt('Reject refund for ' + label + '.\\nOptional: enter a reason to include in the customer message:');
   if (reason === null) return; // user pressed Cancel
   try {
-    const r = await fetch('/admin/refund-requests/' + id + '/reject', {
+    const r = await adminFetch('/admin/refund-requests/' + id + '/reject', {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({reason: reason.trim() || null}),
@@ -1313,7 +1782,7 @@ async function rejectRefund(id, orderRef) {
 async function resolveRefund(id) {
   if (!confirm('Mark refund request #' + id + ' as resolved?')) return;
   try {
-    const r = await fetch('/admin/refund-requests/' + id + '/resolve', {method: 'PATCH'});
+    const r = await adminFetch('/admin/refund-requests/' + id + '/resolve', {method: 'PATCH'});
     if (!r.ok) { const e = await r.json(); alert('Error: ' + (e.detail || r.status)); return; }
     await loadRefunds();
   } catch(e) { alert('Request failed: ' + e.message); }
@@ -1378,7 +1847,7 @@ function renderReceipts(data) {
 async function adminVerifyPayment(id) {
   if (!confirm('Verify this payment and confirm the order? The customer will be notified via WhatsApp.')) return;
   try {
-    const r = await fetch('/admin/payment-verifications/' + id + '/approve', {method: 'PATCH'});
+    const r = await adminFetch('/admin/payment-verifications/' + id + '/approve', {method: 'PATCH'});
     const data = await r.json();
     if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
     alert('Order confirmed! Customer notified: ' + (data.customer_notified ? 'Yes' : 'Window expired'));
@@ -1389,11 +1858,144 @@ async function adminVerifyPayment(id) {
 async function adminRequestResend(id) {
   if (!confirm('Ask the customer to resend a clearer receipt?')) return;
   try {
-    const r = await fetch('/admin/payment-verifications/' + id + '/request-resend', {method: 'PATCH'});
+    const r = await adminFetch('/admin/payment-verifications/' + id + '/request-resend', {method: 'PATCH'});
     const data = await r.json();
     if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
     alert('Message sent to customer: ' + (data.customer_notified ? 'Yes' : 'Window expired'));
     await loadAll();
+  } catch(e) { alert('Request failed: ' + e.message); }
+}
+
+// ---- Tenants (platform / superadmin) ----
+async function loadTenants() {
+  try {
+    const r = await superadminFetch('/admin/tenants');
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      document.getElementById('tenants-body').innerHTML =
+        '<tr><td colspan="7" class="empty" style="color:#dc2626">Error: ' + (data.detail || r.status) + '</td></tr>';
+      return;
+    }
+    renderTenants(await r.json());
+  } catch(e) {
+    document.getElementById('tenants-body').innerHTML = '<tr><td colspan="7" class="empty" style="color:#dc2626">Error: ' + e.message + '</td></tr>';
+  }
+}
+
+let tenantsById = {};
+function renderTenants(tenants) {
+  document.getElementById('tenants-count').textContent = tenants.length;
+  tenantsById = {};
+  tenants.forEach(t => { tenantsById[t.id] = t; });
+  if (!tenants.length) { document.getElementById('tenants-body').innerHTML = '<tr><td colspan="7" class="empty">No tenants yet</td></tr>'; return; }
+  document.getElementById('tenants-body').innerHTML = tenants.map(t => {
+    const active = t.status === 'active';
+    const statusBadge = active
+      ? '<span class="badge b-green">Active</span>'
+      : '<span class="badge b-gray">' + t.status + '</span>';
+    const btn = (label, color, onclick) =>
+      `<button onclick="${onclick}" style="background:${color};color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">${label}</button>`;
+    // The default tenant (id=1) can't be suspended or deleted — it's the fallback.
+    const suspendBtn = t.id === 1 ? ''
+      : active ? btn('Suspend', '#b45309', `setTenantStatus(${t.id},'inactive')`)
+               : btn('Activate', '#16a34a', `setTenantStatus(${t.id},'active')`);
+    const deleteBtn = t.id === 1 ? '' : btn('Delete', '#ef4444', `deleteTenant(${t.id})`);
+    return `<tr>
+      <td class="mono">${t.id}</td>
+      <td style="font-weight:600">${t.name}</td>
+      <td class="mono">${t.whatsapp_number || '—'}</td>
+      <td class="mono">${t.phone_number_id || '—'}</td>
+      <td>${statusBadge}</td>
+      <td style="white-space:nowrap;font-size:12px;color:#6b7280">${fmt_date(t.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${btn('Edit', '#6366f1', `editTenant(${t.id})`)}
+          ${btn('Rotate Key', '#d97706', `rotateTenantKey(${t.id})`)}
+          ${suspendBtn}
+          ${deleteBtn}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function editTenant(id) {
+  const t = tenantsById[id];
+  if (!t) return;
+  const name = prompt('Tenant name:', t.name);
+  if (name === null) return;
+  const whatsapp_number = prompt('WhatsApp number (blank to clear):', t.whatsapp_number || '');
+  if (whatsapp_number === null) return;
+  const phone_number_id = prompt('Meta phone_number_id (blank to clear):', t.phone_number_id || '');
+  if (phone_number_id === null) return;
+  try {
+    const r = await superadminFetch('/admin/tenants/' + id, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name: name.trim(),
+        whatsapp_number: whatsapp_number.trim() || null,
+        phone_number_id: phone_number_id.trim() || null,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
+    await loadTenants();
+  } catch(e) { alert('Request failed: ' + e.message); }
+}
+
+async function setTenantStatus(id, status) {
+  const verb = status === 'active' ? 'Activate' : 'Suspend';
+  if (!confirm(verb + ' tenant #' + id + '?' + (status === 'inactive' ? ' A suspended tenant cannot access the API or receive messages.' : ''))) return;
+  try {
+    const r = await superadminFetch('/admin/tenants/' + id, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status}),
+    });
+    const data = await r.json();
+    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
+    await loadTenants();
+  } catch(e) { alert('Request failed: ' + e.message); }
+}
+
+async function deleteTenant(id) {
+  if (!confirm('Delete tenant #' + id + ' permanently?\\n\\nOnly empty tenants (no customers/orders) can be deleted. To disable a tenant with data, use Suspend instead.')) return;
+  try {
+    const r = await superadminFetch('/admin/tenants/' + id, {method: 'DELETE'});
+    const data = await r.json().catch(()=>({}));
+    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
+    await loadTenants();
+  } catch(e) { alert('Request failed: ' + e.message); }
+}
+
+async function createTenantPrompt() {
+  const name = prompt('New tenant name:');
+  if (!name) return;
+  const whatsapp_number = prompt('WhatsApp number (optional, e.g. +15551234567):') || null;
+  const phone_number_id = prompt('Meta phone_number_id (optional, for webhook routing):') || null;
+  try {
+    const r = await superadminFetch('/admin/tenants', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, whatsapp_number, phone_number_id}),
+    });
+    const data = await r.json();
+    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
+    alert(
+      'Tenant created!\\n\\n' +
+      'Admin API Key (shown once — copy it now):\\n' + data.admin_api_key + '\\n\\n' +
+      'Give this key to the tenant — they enter it in their own dashboard session.'
+    );
+    await loadTenants();
+  } catch(e) { alert('Request failed: ' + e.message); }
+}
+
+async function rotateTenantKey(id) {
+  if (!confirm('Rotate the admin API key for tenant #' + id + '? The old key will stop working immediately.')) return;
+  try {
+    const r = await superadminFetch('/admin/tenants/' + id + '/rotate-key', {method: 'POST'});
+    const data = await r.json();
+    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
+    alert('New Admin API Key (shown once — copy it now):\\n' + data.admin_api_key);
   } catch(e) { alert('Request failed: ' + e.message); }
 }
 
@@ -1414,9 +2016,48 @@ window.onerror = function(msg, src, line) {
   showBanner('JS Error: ' + msg + ' (line ' + line + ')');
 };
 
+// ---- Admin auth ----
+function getAdminKey() {
+  let k = localStorage.getItem('adminApiKey');
+  if (!k) {
+    k = prompt('Enter Admin API Key for this tenant:') || '';
+    if (k) localStorage.setItem('adminApiKey', k);
+  }
+  return k;
+}
+async function adminFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, {'X-Admin-Key': getAdminKey()});
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    // Stored key was rejected — clear it so the next call re-prompts.
+    localStorage.removeItem('adminApiKey');
+  }
+  return r;
+}
+
+// ---- Superadmin auth (platform-level — tenant management only) ----
+function getSuperadminKey() {
+  let k = localStorage.getItem('superadminKey');
+  if (!k) {
+    k = prompt('Enter Superadmin Key (platform-level, for tenant management):') || '';
+    if (k) localStorage.setItem('superadminKey', k);
+  }
+  return k;
+}
+async function superadminFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, {'X-Superadmin-Key': getSuperadminKey()});
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    localStorage.removeItem('superadminKey');
+  }
+  return r;
+}
+
 // ---- safe fetch helper ----
 async function safeFetch(url) {
-  const r = await fetch(url);
+  const r = await adminFetch(url);
   if (!r.ok) throw new Error(url + ' → HTTP ' + r.status);
   return r.json();
 }
@@ -1492,6 +2133,9 @@ async function loadAll() {
 document.getElementById('add-product-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeAddProduct();
 });
+document.getElementById('edit-product-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeEditProduct();
+});
 
 loadAll();
 setInterval(loadAll, 30000);  // auto-refresh every 30s
@@ -1501,13 +2145,15 @@ setInterval(loadAll, 30000);  // auto-refresh every 30s
 
 
 @router.get("/admin/payment-verifications")
-async def list_payment_verifications(db: AsyncSession = Depends(get_db)) -> dict:
+async def list_payment_verifications(db: AsyncSession = Depends(get_db), tenant_id: int = Depends(get_authenticated_tenant_id)) -> dict:
     """Return all pending payment verification records."""
     from app.db.models import PendingPaymentVerification, Customer
     from sqlalchemy import select
 
     result = await db.execute(
-        select(PendingPaymentVerification).order_by(PendingPaymentVerification.created_at.desc())
+        select(PendingPaymentVerification)
+        .where(PendingPaymentVerification.tenant_id == tenant_id)
+        .order_by(PendingPaymentVerification.created_at.desc())
     )
     rows = result.scalars().all()
     out = []
@@ -1533,6 +2179,7 @@ async def list_payment_verifications(db: AsyncSession = Depends(get_db)) -> dict
 async def approve_payment_verification(
     ppv_id: int,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Admin approves a pending payment receipt — marks order paid, notifies customer."""
     from app.db.crud import (
@@ -1546,13 +2193,14 @@ async def approve_payment_verification(
     from app.events.recorder import record_stage_change
     from sqlalchemy import select as sa_select
 
-    ppv = await get_payment_verification_by_id(db, ppv_id)
+    _tid = tenant_id
+    ppv = await get_payment_verification_by_id(db, ppv_id, tenant_id=_tid)
     if ppv is None:
         raise HTTPException(status_code=404, detail=f"Verification #{ppv_id} not found")
     if ppv.status != "pending":
         raise HTTPException(status_code=409, detail="Already processed")
 
-    order = await get_order_by_ref(db, ppv.order_ref)
+    order = await get_order_by_ref(db, ppv.order_ref, tenant_id=ppv.tenant_id)
     if order and order.status == OrderStatus.awaiting_payment:
         await update_order_status(db, order, OrderStatus.paid)
         cust = (await db.execute(sa_select(Customer).where(Customer.id == ppv.customer_id))).scalar_one_or_none()
@@ -1560,7 +2208,8 @@ async def approve_payment_verification(
             await record_stage_change(db, cust, CRMStage.closed_won)
             await update_customer(db, cust, crm_stage=CRMStage.closed_won)
 
-    await resolve_payment_verification(db, ppv_id, "approved")
+    await resolve_payment_verification(db, ppv_id, "approved", tenant_id=_tid)
+    await _audit(db, tenant_id=_tid, action="approve_payment_verification", ppv_id=ppv_id, order_ref=ppv.order_ref)
     await db.commit()
 
     notified = False
@@ -1592,19 +2241,22 @@ async def approve_payment_verification(
 async def request_payment_resend(
     ppv_id: int,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Admin asks the customer to resend a clearer receipt."""
     from app.db.crud import get_payment_verification_by_id, resolve_payment_verification
     from app.db.models import Customer
     from sqlalchemy import select as sa_select
 
-    ppv = await get_payment_verification_by_id(db, ppv_id)
+    _tid = tenant_id
+    ppv = await get_payment_verification_by_id(db, ppv_id, tenant_id=_tid)
     if ppv is None:
         raise HTTPException(status_code=404, detail=f"Verification #{ppv_id} not found")
     if ppv.status != "pending":
         raise HTTPException(status_code=409, detail="Already processed")
 
-    await resolve_payment_verification(db, ppv_id, "resend_requested")
+    await resolve_payment_verification(db, ppv_id, "resend_requested", tenant_id=_tid)
+    await _audit(db, tenant_id=_tid, action="request_payment_resend", ppv_id=ppv_id, order_ref=ppv.order_ref)
     await db.commit()
 
     notified = False
@@ -1633,13 +2285,15 @@ async def request_payment_resend(
 
 
 @router.get("/admin/refund-requests")
-async def list_refund_requests(db: AsyncSession = Depends(get_db)) -> dict:
+async def list_refund_requests(db: AsyncSession = Depends(get_db), tenant_id: int = Depends(get_authenticated_tenant_id)) -> dict:
     """Return all refund requests with customer info, newest first."""
     from app.db.models import RefundRequest, Customer, Order
     from sqlalchemy import select
 
     result = await db.execute(
-        select(RefundRequest).order_by(RefundRequest.created_at.desc())
+        select(RefundRequest)
+        .where(RefundRequest.tenant_id == tenant_id)
+        .order_by(RefundRequest.created_at.desc())
     )
     rows = result.scalars().all()
 
@@ -1650,7 +2304,9 @@ async def list_refund_requests(db: AsyncSession = Depends(get_db)) -> dict:
         # Refund amount = the total of the order being refunded (orders are immutable).
         amount = None
         if r.order_ref:
-            ord_row = await db.execute(select(Order).where(Order.order_ref == r.order_ref))
+            ord_row = await db.execute(
+                select(Order).where(Order.order_ref == r.order_ref, Order.tenant_id == r.tenant_id)
+            )
             order = ord_row.scalar_one_or_none()
             if order is not None:
                 amount = float(order.total)
@@ -1672,13 +2328,15 @@ async def list_refund_requests(db: AsyncSession = Depends(get_db)) -> dict:
 async def resolve_refund(
     refund_id: int,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Mark a refund request as resolved (legacy — use /approve or /reject instead)."""
     from app.db.crud import resolve_refund_request
 
-    row = await resolve_refund_request(db, refund_id)
+    row = await resolve_refund_request(db, refund_id, tenant_id=tenant_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"Refund request #{refund_id} not found")
+    await _audit(db, tenant_id=tenant_id, action="resolve_refund", refund_id=refund_id)
     await db.commit()
     return {"id": row.id, "status": row.status}
 
@@ -1691,12 +2349,13 @@ class RefundActionBody(BaseModel):
 async def approve_refund(
     refund_id: int,
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Approve a refund request and notify the customer via WhatsApp."""
     from app.db.models import Customer, Order, RefundRequest
     from sqlalchemy import select
 
-    result = await db.execute(select(RefundRequest).where(RefundRequest.id == refund_id))
+    result = await db.execute(select(RefundRequest).where(RefundRequest.id == refund_id, RefundRequest.tenant_id == tenant_id))
     row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Refund request #{refund_id} not found")
@@ -1706,12 +2365,15 @@ async def approve_refund(
     # Refund amount = the total of the order being refunded.
     amount_str = ""
     if row.order_ref:
-        ord_row = await db.execute(select(Order).where(Order.order_ref == row.order_ref))
+        ord_row = await db.execute(
+            select(Order).where(Order.order_ref == row.order_ref, Order.tenant_id == row.tenant_id)
+        )
         order = ord_row.scalar_one_or_none()
         if order is not None:
             amount_str = f" of PKR {order.total:,.2f}"
 
     row.status = "approved"
+    await _audit(db, tenant_id=tenant_id, action="approve_refund", refund_id=refund_id, order_ref=row.order_ref)
     await db.commit()
 
     notified = False
@@ -1745,12 +2407,13 @@ async def reject_refund(
     refund_id: int,
     body: RefundActionBody = Body(default=None),
     db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Reject a refund request and notify the customer via WhatsApp."""
     from app.db.models import Customer, RefundRequest
     from sqlalchemy import select
 
-    result = await db.execute(select(RefundRequest).where(RefundRequest.id == refund_id))
+    result = await db.execute(select(RefundRequest).where(RefundRequest.id == refund_id, RefundRequest.tenant_id == tenant_id))
     row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Refund request #{refund_id} not found")
@@ -1758,6 +2421,7 @@ async def reject_refund(
         raise HTTPException(status_code=409, detail="Already processed")
 
     row.status = "rejected"
+    await _audit(db, tenant_id=tenant_id, action="reject_refund", refund_id=refund_id, order_ref=row.order_ref)
     await db.commit()
 
     notified = False
@@ -1785,6 +2449,169 @@ async def reject_refund(
         pass
 
     return {"id": refund_id, "status": "rejected", "customer_notified": notified}
+
+
+@router.get("/admin/tenants")
+async def list_admin_tenants(
+    db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
+) -> list[dict]:
+    from app.db.crud import list_tenants
+    tenants = await list_tenants(db)
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "whatsapp_number": t.whatsapp_number,
+            "phone_number_id": t.phone_number_id,
+            "status": t.status,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in tenants
+    ]
+
+
+@router.post("/admin/tenants", status_code=201)
+async def create_admin_tenant(
+    body: TenantCreate,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_superadmin),
+) -> dict:
+    import secrets
+    from app.db.crud import create_tenant
+    admin_api_key = secrets.token_urlsafe(32)
+    tenant = await create_tenant(
+        db,
+        name=body.name,
+        whatsapp_number=body.whatsapp_number,
+        phone_number_id=body.phone_number_id,
+        admin_api_key=admin_api_key,
+        status=body.status,
+    )
+    await _audit(db, tenant_id=tenant.id, action="create_tenant", name=body.name)
+    await db.commit()
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "whatsapp_number": tenant.whatsapp_number,
+        "phone_number_id": tenant.phone_number_id,
+        "status": tenant.status,
+        "admin_api_key": admin_api_key,  # shown once — caller must store it now
+    }
+
+
+@router.get("/admin/tenants/{tenant_id}")
+async def get_admin_tenant(
+    tenant_id: int, db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
+) -> dict:
+    from app.db.crud import get_tenant_by_id
+    tenant = await get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "whatsapp_number": tenant.whatsapp_number,
+        "phone_number_id": tenant.phone_number_id,
+        "status": tenant.status,
+        "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+    }
+
+
+@router.patch("/admin/tenants/{tenant_id}")
+async def update_admin_tenant(
+    tenant_id: int,
+    body: TenantUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_superadmin),
+) -> dict:
+    from app.db.crud import get_tenant_by_id, update_tenant
+    tenant = await get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        tenant = await update_tenant(db, tenant, **updates)
+    await db.commit()
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "whatsapp_number": tenant.whatsapp_number,
+        "phone_number_id": tenant.phone_number_id,
+        "status": tenant.status,
+    }
+
+
+@router.post("/admin/tenants/{tenant_id}/rotate-key")
+async def rotate_admin_tenant_key(
+    tenant_id: int, db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
+) -> dict:
+    """Issue a new admin API key for a tenant, invalidating the old one."""
+    import secrets
+    from app.crypto import hash_key
+    from app.db.crud import get_tenant_by_id, update_tenant
+    tenant = await get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    new_key = secrets.token_urlsafe(32)
+    tenant = await update_tenant(db, tenant, admin_api_key_hash=hash_key(new_key))
+    await _audit(db, tenant_id=tenant.id, action="rotate_admin_api_key")
+    await db.commit()
+    return {"id": tenant.id, "admin_api_key": new_key}  # shown once
+
+
+@router.delete("/admin/tenants/{tenant_id}")
+async def delete_admin_tenant(
+    tenant_id: int, db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
+) -> dict:
+    """Delete a tenant. Guarded: the default tenant (id=1) can never be
+    deleted, and a tenant with existing customers/orders is refused (suspend
+    it instead) to prevent accidental cascade data loss."""
+    from sqlalchemy import func, select
+
+    from app.db.crud import get_tenant_by_id
+    from app.db.models import Customer
+
+    if tenant_id == 1:
+        raise HTTPException(status_code=400, detail="The default tenant cannot be deleted")
+
+    tenant = await get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    customer_count = await db.scalar(
+        select(func.count()).select_from(Customer).where(Customer.tenant_id == tenant_id)
+    )
+    if customer_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Tenant has {customer_count} customer(s) with data. Suspend it instead of deleting.",
+        )
+
+    await db.delete(tenant)
+    await db.commit()
+    return {"deleted": tenant_id}
+
+
+@router.get("/admin/audit-log")
+async def get_admin_audit_log_endpoint(
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Recent sensitive admin actions for this tenant, newest first."""
+    from app.db.crud import get_admin_audit_log
+    rows = await get_admin_audit_log(db, tenant_id=tenant_id)
+    return {
+        "total": len(rows),
+        "entries": [
+            {
+                "id": r.id,
+                "action": (r.payload or {}).get("action"),
+                "detail": {k: v for k, v in (r.payload or {}).items() if k != "action"},
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)

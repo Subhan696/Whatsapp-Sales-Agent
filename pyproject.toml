@@ -27,6 +27,7 @@ dependencies = [
     "alembic>=1.13.0",
     "structlog>=24.2.0",
     "prometheus-client>=0.20.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]

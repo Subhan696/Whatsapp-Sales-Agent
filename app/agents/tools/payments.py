@@ -45,23 +45,20 @@ def _save_image(image_bytes: bytes, mime_type: str, order_ref: str) -> str | Non
         return None
 
 
-@tool
-async def process_payment_receipt(
+async def process_receipt_image(
     media_id: str,
-    state: Annotated[dict, InjectedState],
+    *,
+    customer_id: int | None,
+    tenant_id: int,
 ) -> str:
-    """Process a payment receipt image sent by the customer.
+    """Download a receipt image, OCR it, save it, and queue it for admin review.
 
-    Args:
-        media_id: The WhatsApp media ID of the receipt image.
-
-    Downloads the image, runs Vision-LLM OCR to extract the amount for admin
-    display, saves the image, and queues it for admin review in the CRM.
-    Every receipt must be reviewed by an admin before the order is confirmed.
-    Always returns PAYMENT_PENDING_REVIEW — tell the customer to wait.
+    Plain async function (not an LLM tool) so the webhook background task can
+    call it deterministically the moment an inbound image arrives — guaranteeing
+    every receipt reaches the CRM Receipts tab, instead of depending on the LLM
+    remembering to call a tool. Returns a status string suitable for relaying
+    to the customer.
     """
-    customer_id: int | None = state.get("customer_id")
-
     # --- 1. Download image ---
     image_bytes: bytes | None = None
     mime_type: str = "image/jpeg"
@@ -95,7 +92,7 @@ async def process_payment_receipt(
         async with factory() as db:
             order = None
             if customer_id is not None:
-                order = await get_latest_awaiting_order(db, customer_id)
+                order = await get_latest_awaiting_order(db, customer_id, tenant_id=tenant_id)
 
         order_ref = order.order_ref if order else "UNKNOWN"
         order_total = Decimal(str(order.total)) if order else None
@@ -112,6 +109,7 @@ async def process_payment_receipt(
                     ocr_amount=ocr_amount,
                     order_total=order_total,
                     fail_reason="Awaiting admin verification",
+                    tenant_id=tenant_id,
                 )
 
     except Exception as exc:
@@ -119,3 +117,25 @@ async def process_payment_receipt(
         return "There was an issue processing your receipt. Please contact support."
 
     return "PAYMENT_PENDING_REVIEW: Receipt received and forwarded to admin for verification."
+
+
+@tool
+async def process_payment_receipt(
+    media_id: str,
+    state: Annotated[dict, InjectedState],
+) -> str:
+    """Process a payment receipt image sent by the customer.
+
+    Args:
+        media_id: The WhatsApp media ID of the receipt image.
+
+    Downloads the image, runs Vision-LLM OCR to extract the amount for admin
+    display, saves the image, and queues it for admin review in the CRM.
+    Every receipt must be reviewed by an admin before the order is confirmed.
+    Always returns PAYMENT_PENDING_REVIEW — tell the customer to wait.
+    """
+    return await process_receipt_image(
+        media_id,
+        customer_id=state.get("customer_id"),
+        tenant_id=state.get("tenant_id") or 1,
+    )

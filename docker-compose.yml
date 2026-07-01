@@ -1,43 +1,67 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wauser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wapass}
+      POSTGRES_DB: ${POSTGRES_DB:-wa_agent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wauser} -d ${POSTGRES_DB:-wa_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   app:
     build: .
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - WA_BRIDGE_URL=http://bridge:3000
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - uploads:/app/static/uploads
     restart: unless-stopped
 
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: wauser
-      POSTGRES_PASSWORD: wapass
-      POSTGRES_DB: wa_agent
+  bridge:
+    build: ./wa-bridge
     ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wauser -d wa_agent"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - "3000:3000"
+    environment:
+      - BRIDGE_PORT=3000
+      - PYTHON_INBOUND_URL=http://app:8000/wa-bridge/inbound
+      - WA_BRIDGE_TOKEN=${WA_BRIDGE_TOKEN:-}
+      - WA_WEB_TENANT_IDS=${WA_WEB_TENANT_IDS:-1}
+      - WA_BRIDGE_DATABASE_URL=postgresql://${POSTGRES_USER:-wauser}:${POSTGRES_PASSWORD:-wapass}@postgres:5432/${POSTGRES_DB:-wa_agent}
+      - WA_LOG_LEVEL=silent
+    depends_on:
+      - postgres
+      - app
+    restart: unless-stopped
 
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
     ports:
       - "5050:80"
     depends_on:
       - postgres
     restart: unless-stopped
+    profiles:
+      - dev
 
 volumes:
   pgdata:
+  uploads:

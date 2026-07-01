@@ -18,28 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ------------------------------------------------------------------
-    # PostgreSQL enum types (create before any table that uses them)
-    # SQLite stores enums as strings — skip these statements there.
-    # ------------------------------------------------------------------
-    if op.get_bind().dialect.name != "sqlite":
-        op.execute(
-            "CREATE TYPE crm_stage_enum AS ENUM "
-            "('lead', 'interested', 'awaiting_payment', 'closed_won')"
-        )
-        op.execute(
-            "CREATE TYPE opt_in_status_enum AS ENUM ('pending', 'opted_in', 'opted_out')"
-        )
-        op.execute(
-            "CREATE TYPE order_status_enum AS ENUM "
-            "('draft', 'awaiting_payment', 'paid', 'cancelled')"
-        )
-        op.execute("CREATE TYPE direction_enum AS ENUM ('in', 'out')")
-        op.execute(
-            "CREATE TYPE event_type_enum AS ENUM "
-            "('message_in', 'message_out', 'tool_call', 'stage_change', 'payment_verified', 'error')"
-        )
-
+    # PostgreSQL enum types are created automatically by SQLAlchemy, tied to
+    # the column that first declares them (default create_type=True) — no
+    # manual CREATE TYPE needed. SQLite stores enums as plain strings, so
+    # this is a no-op there either way.
     # ------------------------------------------------------------------
     # customers
     # ------------------------------------------------------------------
@@ -52,7 +34,7 @@ def upgrade() -> None:
             "crm_stage",
             sa.Enum(
                 "lead", "interested", "awaiting_payment", "closed_won",
-                name="crm_stage_enum", create_type=False,
+                name="crm_stage_enum",
             ),
             server_default="lead",
             nullable=False,
@@ -62,14 +44,14 @@ def upgrade() -> None:
             "opt_in_status",
             sa.Enum(
                 "pending", "opted_in", "opted_out",
-                name="opt_in_status_enum", create_type=False,
+                name="opt_in_status_enum",
             ),
             server_default="pending",
             nullable=False,
         ),
         sa.Column("opt_in_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("opt_in_source", sa.String(100), nullable=True),
-        sa.Column("marketing_consent", sa.Boolean(), server_default=sa.text("0"), nullable=False),
+        sa.Column("marketing_consent", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("last_inbound_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -116,7 +98,7 @@ def upgrade() -> None:
         sa.Column("price", sa.Numeric(10, 4), nullable=False),
         sa.Column("stock", sa.Integer(), server_default="0", nullable=False),
         sa.Column("tags", sa.JSON(), nullable=True),
-        sa.Column("active", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True),
             server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False,
@@ -146,7 +128,7 @@ def upgrade() -> None:
             "status",
             sa.Enum(
                 "draft", "awaiting_payment", "paid", "cancelled",
-                name="order_status_enum", create_type=False,
+                name="order_status_enum",
             ),
             server_default="draft",
             nullable=False,
@@ -172,7 +154,7 @@ def upgrade() -> None:
         sa.Column("amount", sa.Numeric(12, 4), nullable=False),
         sa.Column("sender_name", sa.String(255), nullable=False),
         sa.Column("txn_date", sa.Date(), nullable=False),
-        sa.Column("consumed", sa.Boolean(), server_default=sa.text("0"), nullable=False),
+        sa.Column("consumed", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True),
             server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False,
@@ -205,7 +187,7 @@ def upgrade() -> None:
         sa.Column("customer_id", sa.Integer(), nullable=False),
         sa.Column(
             "direction",
-            sa.Enum("in", "out", name="direction_enum", create_type=False),
+            sa.Enum("in", "out", name="direction_enum"),
             nullable=False,
         ),
         sa.Column("wa_message_id", sa.String(100), nullable=True),
@@ -252,7 +234,7 @@ def upgrade() -> None:
             sa.Enum(
                 "message_in", "message_out", "tool_call", "stage_change",
                 "payment_verified", "error",
-                name="event_type_enum", create_type=False,
+                name="event_type_enum",
             ),
             nullable=False,
         ),
@@ -294,6 +276,10 @@ def downgrade() -> None:
     op.drop_index("ix_customers_wa_id", table_name="customers")
     op.drop_table("customers")
 
+    # PostgreSQL enum types are NOT dropped automatically when their owning
+    # column/table is dropped (unlike creation, which SQLAlchemy does
+    # automatically regardless of create_type) — they'd be left orphaned.
+    # SQLite stores enums as plain strings, so this is a no-op there.
     if op.get_bind().dialect.name != "sqlite":
         op.execute("DROP TYPE event_type_enum")
         op.execute("DROP TYPE direction_enum")

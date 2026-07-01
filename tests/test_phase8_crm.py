@@ -85,7 +85,7 @@ async def test_same_stage_is_noop():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
         result = await update_crm.ainvoke({"stage": "lead", "state": _STATE})
@@ -102,7 +102,7 @@ async def test_valid_transition_lead_to_interested():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.update_customer", AsyncMock(return_value=mock_customer)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
@@ -122,7 +122,7 @@ async def test_valid_transition_interested_to_awaiting_payment():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.get_latest_awaiting_order", AsyncMock(return_value=mock_order)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
@@ -141,7 +141,7 @@ async def test_invalid_skip_lead_to_awaiting_payment():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
         result = await update_crm.ainvoke({"stage": "awaiting_payment", "state": _STATE})
@@ -158,7 +158,7 @@ async def test_invalid_skip_lead_to_closed_won():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
         result = await update_crm.ainvoke({"stage": "closed_won", "state": _STATE})
@@ -176,7 +176,7 @@ async def test_closed_won_to_interested_allowed_rebuy():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.update_customer", AsyncMock(return_value=mock_customer)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
@@ -195,7 +195,7 @@ async def test_backward_transition_blocked():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.events.recorder.record_stage_change", AsyncMock()) as mock_record,
     ):
         result = await update_crm.ainvoke({"stage": "closed_won", "state": _STATE})
@@ -213,7 +213,7 @@ async def test_cancellation_rollback_allowed():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.update_customer", AsyncMock()),
         patch("app.events.recorder.record_stage_change", AsyncMock()),
     ):
@@ -239,7 +239,7 @@ async def test_product_tags_merged_on_interested_transition():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.update_customer", mock_update),
         patch("app.events.recorder.record_stage_change", AsyncMock()),
     ):
@@ -269,7 +269,7 @@ async def test_order_ref_in_metadata_on_awaiting_payment():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.get_latest_awaiting_order", AsyncMock(return_value=mock_order)),
         patch("app.events.recorder.record_stage_change", mock_record),
     ):
@@ -293,7 +293,7 @@ async def test_no_product_tags_skips_update_customer():
 
     with (
         patch("app.db.base.get_session_factory", return_value=_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)),
+        patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)),
         patch("app.db.crud.update_customer", mock_update),
         patch("app.events.recorder.record_stage_change", AsyncMock()),
     ):

@@ -44,3 +44,14 @@ pyrightconfig.json
 # OS
 .DS_Store
 Thumbs.db
+nul
+
+# Uploaded files (product images, receipts) — live on server volume, not in repo
+static/uploads/
+
+# wa-bridge (Node)
+wa-bridge/node_modules/
+wa-bridge/.env
+wa-bridge/.wwebjs_auth/
+wa-bridge/.baileys_auth/
+wa-bridge/npm-debug.log*

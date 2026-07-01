@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     META_GRAPH_API_VERSION: str = "v21.0"
     ADMIN_WHATSAPP_NUMBER: str
 
+    # Channel provider — official Meta Cloud API, or the whatsapp-web.js bridge.
+    # "wa_web" routes all inbound/outbound through the local Node bridge (wa-bridge/).
+    CHANNEL_PROVIDER: Literal["meta", "wa_web"] = "meta"
+    WA_BRIDGE_URL: str = "http://localhost:3000"
+    WA_BRIDGE_TOKEN: str = ""  # shared secret; if set, required on /wa-bridge/inbound
+
     # Commerce
     DEFAULT_COMMERCE_MODE: Literal["website", "whatsapp_only"] = "whatsapp_only"
     SHOPIFY_STORE_DOMAIN: str = ""
@@ -43,6 +49,30 @@ class Settings(BaseSettings):
     # Public base URL (used to convert /static/uploads/… paths to full URLs for WhatsApp)
     # Set to your ngrok URL while developing, e.g. https://abc123.ngrok-free.app
     BASE_URL: str = "http://localhost:8000"
+
+    # Comma-separated list of origins allowed to call this API cross-origin
+    # (e.g. a separately-hosted admin frontend). Empty = no cross-origin JS
+    # callers allowed at all. The bundled CRM dashboard is served same-origin
+    # and is unaffected either way.
+    CORS_ALLOWED_ORIGINS: str = ""
+
+    # Multi-tenancy — Phase 1 uses a single static tenant.
+    # Phase 2 (multi-session manager) will resolve per-message instead.
+    DEFAULT_TENANT_ID: int = 1
+
+    # Platform-level secret gating tenant management (create/list/rotate-key).
+    # Distinct from per-tenant admin_api_key — this protects the ability to
+    # provision tenants at all. Empty by default; unset means tenant
+    # management is locked (fail closed, not open).
+    SUPERADMIN_KEY: str = ""
+
+    # Master key for encrypting sensitive secrets at rest (e.g. meta_access_token
+    # in AppSetting). Fernet key — generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Unset means encryption is disabled — sensitive values are stored as
+    # plaintext with a startup warning, not a hard failure (don't brick existing
+    # deployments that haven't set this yet).
+    SECRETS_ENCRYPTION_KEY: str = ""
 
     # Database
     DATABASE_URL: str
@@ -66,6 +96,10 @@ class Settings(BaseSettings):
     @property
     def opt_out_keywords_list(self) -> list[str]:
         return [k.strip().upper() for k in self.OPT_OUT_KEYWORDS.split(",") if k.strip()]
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @property
     def meta_graph_base_url(self) -> str:

@@ -147,7 +147,7 @@ async def test_respond_node_sends_message():
         yield mock_db
 
     with patch("app.db.base.get_session_factory", return_value=_fake_factory), \
-         patch("app.db.crud.get_customer_by_wa_id", AsyncMock(return_value=mock_customer)), \
+         patch("app.db.crud.get_customer_by_id", AsyncMock(return_value=mock_customer)), \
          patch("app.messaging.service.send_text_message", mock_send):
         result = await respond_node(state)
 
@@ -178,7 +178,7 @@ async def test_respond_node_handles_send_failure():
         yield mock_db
 
     with patch("app.db.base.get_session_factory", return_value=_fake_factory), \
-         patch("app.db.crud.get_customer_by_wa_id", AsyncMock(side_effect=RuntimeError("DB down"))):
+         patch("app.db.crud.get_customer_by_id", AsyncMock(side_effect=RuntimeError("DB down"))):
         result = await respond_node(state)
 
     assert result == {}  # error swallowed, graph continues

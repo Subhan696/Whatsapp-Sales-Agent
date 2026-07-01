@@ -56,11 +56,13 @@ async def update_crm(
         )
 
     wa_id: str = state.get("wa_id", "")
+    customer_id: int | None = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
 
     try:
         from app.db.base import get_session_factory
         from app.db.crud import (
-            get_customer_by_wa_id,
+            get_customer_by_id,
             get_latest_awaiting_order,
             update_customer,
         )
@@ -72,7 +74,7 @@ async def update_crm(
 
         async with factory() as db:
             async with db.begin():
-                customer = await get_customer_by_wa_id(db, wa_id)
+                customer = await get_customer_by_id(db, customer_id)
                 if customer is None:
                     return f"ERROR: customer not found for wa_id={wa_id!r}"
 
@@ -103,7 +105,7 @@ async def update_crm(
                     await update_customer(db, customer, product_tags=merged)
 
                 if target == CRMStage.awaiting_payment:
-                    order = await get_latest_awaiting_order(db, customer.id)
+                    order = await get_latest_awaiting_order(db, customer.id, tenant_id=tenant_id)
                     if order:
                         metadata["order_ref"] = order.order_ref
 
@@ -137,6 +139,7 @@ async def flag_cancellation_pending(
                    Use last_order_ref from context if available.
     """
     wa_id: str = state.get("wa_id", "")
+    tenant_id: int = state.get("tenant_id") or 1
     try:
         from app.db.base import get_session_factory
         from app.db.crud import flag_order_cancellation_pending, get_order_by_ref
@@ -144,7 +147,7 @@ async def flag_cancellation_pending(
         factory = get_session_factory()
         async with factory() as db:
             async with db.begin():
-                order = await get_order_by_ref(db, order_ref)
+                order = await get_order_by_ref(db, order_ref, tenant_id=tenant_id)
                 if order is None:
                     return f"ERROR: Order '{order_ref}' not found."
                 await flag_order_cancellation_pending(db, order)
@@ -172,6 +175,7 @@ async def request_refund(
         reason: The reason the customer gave for requesting a refund.
     """
     customer_id: int | None = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
     wa_id: str = state.get("wa_id", "")
     try:
         from app.db.base import get_session_factory
@@ -184,7 +188,7 @@ async def request_refund(
             async with db.begin():
                 # Only paid orders qualify for refunds
                 if order_ref and order_ref != "UNKNOWN":
-                    order = await get_order_by_ref(db, order_ref)
+                    order = await get_order_by_ref(db, order_ref, tenant_id=tenant_id)
                     if order is None:
                         return f"ERROR: Order '{order_ref}' not found."
                     if order.status != OrderStatus.paid:
@@ -199,6 +203,7 @@ async def request_refund(
                     customer_id=customer_id,
                     order_ref=order_ref if order_ref != "UNKNOWN" else None,
                     reason=reason,
+                    tenant_id=tenant_id,
                 )
     except Exception as exc:
         logger.error("request_refund_error", error=str(exc), order_ref=order_ref, wa_id=wa_id)

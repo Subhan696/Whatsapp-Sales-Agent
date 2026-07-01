@@ -109,21 +109,21 @@ def test_regular_message_not_opt_out():
 async def test_send_within_window(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002001")
+    customer = await create_customer(db_session, "+254799002001", tenant_id=1)
     mock = _mock_client()
 
     result = await send_text_message(db_session, customer, "Your order is confirmed!", _client=mock)
 
     assert result.status == "sent"
     assert result.wa_message_id == "wamid.mock_001"
-    mock.send_text.assert_awaited_once_with("+254799002001", "Your order is confirmed!")
+    mock.send_text.assert_awaited_once_with("+254799002001", "Your order is confirmed!", tenant_id=1)
 
 
 @pytest.mark.asyncio
 async def test_send_writes_message_log(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002002")
+    customer = await create_customer(db_session, "+254799002002", tenant_id=1)
 
     await send_text_message(db_session, customer, "Hello!", _client=_mock_client())
     await db_session.flush()
@@ -139,7 +139,7 @@ async def test_send_writes_message_log(db_session):
 async def test_send_writes_message_out_event(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002003")
+    customer = await create_customer(db_session, "+254799002003", tenant_id=1)
 
     await send_text_message(db_session, customer, "Hi!", _client=_mock_client())
     await db_session.flush()
@@ -158,7 +158,7 @@ async def test_send_writes_message_out_event(db_session):
 async def test_send_outside_window_returns_needs_template(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002004")
+    customer = await create_customer(db_session, "+254799002004", tenant_id=1)
     customer.last_inbound_at = datetime.now(timezone.utc) - timedelta(hours=25)
 
     mock = _mock_client()
@@ -172,7 +172,7 @@ async def test_send_outside_window_returns_needs_template(db_session):
 async def test_send_opted_out_returns_suppressed(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002005")
+    customer = await create_customer(db_session, "+254799002005", tenant_id=1)
     customer.opt_in_status = OptInStatus.opted_out
 
     mock = _mock_client()
@@ -191,7 +191,7 @@ async def test_send_opted_out_returns_suppressed(db_session):
 async def test_opt_out_keyword_sets_opted_out(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002006")
+    customer = await create_customer(db_session, "+254799002006", tenant_id=1)
     assert customer.opt_in_status == OptInStatus.opted_in
 
     changed = await handle_opt_out_if_keyword(db_session, customer, "STOP")
@@ -205,7 +205,7 @@ async def test_opt_out_keyword_sets_opted_out(db_session):
 async def test_non_opt_out_keyword_unchanged(db_session):
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002007")
+    customer = await create_customer(db_session, "+254799002007", tenant_id=1)
 
     changed = await handle_opt_out_if_keyword(db_session, customer, "Hello there")
     assert changed is False
@@ -217,7 +217,7 @@ async def test_opt_out_suppresses_subsequent_send(db_session):
     """After an opt-out keyword, send_text_message must return opted_out."""
     from app.db.crud import create_customer
 
-    customer = await create_customer(db_session, "+254799002008")
+    customer = await create_customer(db_session, "+254799002008", tenant_id=1)
 
     # Simulate inbound STOP keyword processing
     await handle_opt_out_if_keyword(db_session, customer, "STOP")

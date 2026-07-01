@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -64,6 +65,7 @@ class EventType(str, enum.Enum):
     stage_change = "stage_change"
     payment_verified = "payment_verified"
     error = "error"
+    admin_action = "admin_action"
 
 
 # ---------------------------------------------------------------------------
@@ -71,11 +73,32 @@ class EventType(str, enum.Enum):
 # ---------------------------------------------------------------------------
 
 
+class Tenant(Base):
+    """A SaaS client business. Every business table below carries a tenant_id FK to this."""
+
+    __tablename__ = "tenants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True)
+    phone_number_id: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)
+    # One-way SHA-256 hash of the admin API key — never the plaintext. The
+    # plaintext is generated, shown to the caller once, and discarded.
+    admin_api_key_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Customer(Base):
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    wa_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1"
+    )
+    wa_id: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     crm_stage: Mapped[CRMStage] = mapped_column(
         SAEnum(CRMStage, name="crm_stage_enum"),
@@ -109,11 +132,16 @@ class Customer(Base):
     stage_histories: Mapped[list[StageHistory]] = relationship("StageHistory", back_populates="customer")
     events: Mapped[list[Event]] = relationship("Event", back_populates="customer")
 
+    __table_args__ = (UniqueConstraint("tenant_id", "wa_id", name="uq_customers_tenant_wa_id"),)
+
 
 class Session(Base):
     __tablename__ = "sessions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     customer_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("customers.id"), nullable=False, index=True
     )
@@ -131,7 +159,10 @@ class Product(Base):
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    sku: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
+    sku: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
@@ -147,12 +178,17 @@ class Product(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),)
+
 
 class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    order_ref: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
+    order_ref: Mapped[str] = mapped_column(String(30), nullable=False)
     customer_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("customers.id"), nullable=False, index=True
     )
@@ -179,11 +215,16 @@ class Order(Base):
 
     customer: Mapped[Customer] = relationship("Customer", back_populates="orders")
 
+    __table_args__ = (UniqueConstraint("tenant_id", "order_ref", name="uq_orders_tenant_order_ref"),)
+
 
 class UnverifiedBankTransaction(Base):
     __tablename__ = "unverified_bank_transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     reference_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
     sender_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -207,9 +248,16 @@ class MessageLog(Base):
     __tablename__ = "message_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     direction: Mapped[MessageDirection] = mapped_column(
-        SAEnum(MessageDirection, name="direction_enum"),
+        # values_callable: MessageDirection is the one enum here where member
+        # name != value (inbound -> "in"). SQLAlchemy's Enum serializes using
+        # .name by default, but the real Postgres direction_enum type (and
+        # every other enum in this file) only knows the .value strings.
+        SAEnum(MessageDirection, name="direction_enum", values_callable=lambda enum_cls: [e.value for e in enum_cls]),
         nullable=False,
     )
     wa_message_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -228,6 +276,9 @@ class StageHistory(Base):
     __tablename__ = "stage_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     from_stage: Mapped[str | None] = mapped_column(String(50), nullable=True)
     to_stage: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -241,10 +292,13 @@ class StageHistory(Base):
 
 
 class AppSetting(Base):
-    """Admin-configurable key/value settings (e.g. bank transfer details)."""
+    """Admin-configurable key/value settings (e.g. bank transfer details). PK is (tenant_id, key)."""
 
     __tablename__ = "app_settings"
 
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), primary_key=True, default=1, server_default="1"
+    )
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False, default="")
     updated_at: Mapped[datetime] = mapped_column(
@@ -258,6 +312,9 @@ class PendingPaymentVerification(Base):
     __tablename__ = "pending_payment_verifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
     order_ref: Mapped[str] = mapped_column(String(30), nullable=False)
     image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -278,6 +335,9 @@ class RefundRequest(Base):
     __tablename__ = "refund_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
     order_ref: Mapped[str | None] = mapped_column(String(30), nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -295,6 +355,9 @@ class Event(Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
     customer_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("customers.id"), nullable=True
     )

@@ -19,6 +19,7 @@ os.environ.setdefault("META_PHONE_NUMBER_ID", "123456789")
 os.environ.setdefault("ADMIN_WHATSAPP_NUMBER", "+10000000000")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test_anthropic_key")
 os.environ.setdefault("ENABLE_METRICS", "false")  # don't start prometheus server in tests
+os.environ.setdefault("SUPERADMIN_KEY", "test-superadmin-key")
 # Use SQLite in-memory by default; override with TEST_DATABASE_URL for Postgres
 _DEFAULT_DB = "sqlite+aiosqlite:///:memory:"
 os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", _DEFAULT_DB))
@@ -82,3 +83,14 @@ async def db_session(test_engine) -> AsyncSession:
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_state():
+    """Auth-failure lockout state is a module-level global — clear it between
+    tests so one test's intentional 401s don't trip the lockout in another."""
+    from app import rate_limit
+
+    rate_limit.reset_all()
+    yield
+    rate_limit.reset_all()

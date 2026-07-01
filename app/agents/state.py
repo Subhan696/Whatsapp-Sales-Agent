@@ -18,6 +18,7 @@ class AgentState(TypedDict):
     # Customer identity (populated by ingest node)
     wa_id: str
     customer_id: int
+    tenant_id: int
     crm_stage: str
 
     # Determines which backend catalog/order tools use
@@ -25,6 +26,11 @@ class AgentState(TypedDict):
 
     # Inbound image media_id waiting for OCR (set when a receipt image arrives)
     pending_media_id: str | None
+
+    # Result of the backend's deterministic receipt processing for this turn
+    # (set when an image arrived). The agent relays this to the customer — it
+    # no longer calls a tool to process receipts itself.
+    receipt_status: str | None
 
     # Most recently created order reference (so CRM tool can attach it)
     last_order_ref: str | None

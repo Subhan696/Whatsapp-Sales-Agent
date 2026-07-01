@@ -48,6 +48,7 @@ async def search_catalog(
     """
     commerce_mode = state.get("commerce_mode", "whatsapp_only")
     customer_id = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
 
     # Auto-detect price intent from query words
     _q = query.lower().strip()
@@ -67,7 +68,7 @@ async def search_catalog(
         if commerce_mode == "website":
             products = await _shopify_search(query)
         else:
-            products = await _local_search(query, sort_by=sort_by)
+            products = await _local_search(query, sort_by=sort_by, tenant_id=tenant_id)
     except Exception as exc:
         logger.error("catalog_search_error", error=str(exc), commerce_mode=commerce_mode)
         return f"ERROR: catalog search failed — {exc}"
@@ -75,10 +76,11 @@ async def search_catalog(
     # Zero-result fallback: if specific keyword returned nothing, show full catalogue
     if not products and query:
         try:
-            products = await _local_search("", sort_by=sort_by)
+            products = await _local_search("", sort_by=sort_by, tenant_id=tenant_id)
             if products:
                 await _record(customer_id, "search_catalog",
-                              {"query": query, "fallback": True, "sort_by": sort_by}, products)
+                              {"query": query, "fallback": True, "sort_by": sort_by}, products,
+                              tenant_id=tenant_id)
                 header = f"No exact match for '{query}', but here is everything we currently have:\n"
                 lines = [header]
                 for p in products[:10]:
@@ -90,7 +92,8 @@ async def search_catalog(
         return f"No products found matching '{query}'."
 
     await _record(customer_id, "search_catalog",
-                  {"query": query, "sort_by": sort_by, "mode": commerce_mode}, products)
+                  {"query": query, "sort_by": sort_by, "mode": commerce_mode}, products,
+                  tenant_id=tenant_id)
 
     if not products:
         return "No products are currently in stock."
@@ -112,13 +115,13 @@ async def search_catalog(
 # ---------------------------------------------------------------------------
 
 
-async def _local_search(query: str, *, sort_by: str = "name") -> list[ProductResult]:
+async def _local_search(query: str, *, sort_by: str = "name", tenant_id: int) -> list[ProductResult]:
     from app.db.base import get_session_factory
     from app.db.crud import search_products
 
     factory = get_session_factory()
     async with factory() as db:
-        rows = await search_products(db, query, sort_by=sort_by)
+        rows = await search_products(db, query, sort_by=sort_by, tenant_id=tenant_id)
 
     return [
         ProductResult(
@@ -184,22 +187,23 @@ async def send_product_media(
     """
     wa_id: str = state.get("wa_id", "")
     customer_id: int | None = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
 
     try:
         from app.db.base import get_session_factory
-        from app.db.crud import get_product_by_sku, get_customer_by_wa_id
+        from app.db.crud import get_customer_by_id, get_product_by_sku
         from app.messaging.service import send_media_message
 
         factory = get_session_factory()
         async with factory() as db:
-            product = await get_product_by_sku(db, sku)
+            product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
             if product is None:
                 return f"ERROR: Product '{sku}' not found."
 
             if not product.image_url and not product.video_url:
                 return f"No photo or video is set for '{product.name}'. Ask the admin to add one."
 
-            customer = await get_customer_by_wa_id(db, wa_id)
+            customer = await get_customer_by_id(db, customer_id)
             if customer is None:
                 return "ERROR: Customer not found."
 
@@ -233,7 +237,7 @@ async def send_product_media(
 # ---------------------------------------------------------------------------
 
 
-async def _record(customer_id, tool_name, inp, output) -> None:
+async def _record(customer_id, tool_name, inp, output, *, tenant_id: int = 1) -> None:
     try:
         from app.db.base import get_session_factory
         from app.events.recorder import record_tool_call
@@ -241,6 +245,6 @@ async def _record(customer_id, tool_name, inp, output) -> None:
         factory = get_session_factory()
         async with factory() as db:
             async with db.begin():
-                await record_tool_call(db, customer_id, tool_name, inp, output)
+                await record_tool_call(db, customer_id, tool_name, inp, output, tenant_id=tenant_id)
     except Exception as exc:
         logger.warning("tool_event_record_failed", error=str(exc))

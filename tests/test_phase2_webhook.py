@@ -198,7 +198,7 @@ async def test_ingest_creates_customer(db_session):
     msg = _make_text_message(wa_id="+254799001001", msg_id="wamid.ingest_new")
     contact = _make_contact(wa_id="+254799001001", name="New User")
 
-    await ingest_message(db_session, msg, contact)
+    await ingest_message(db_session, msg, contact, 1)
     await db_session.flush()
 
     result = await db_session.execute(
@@ -216,7 +216,7 @@ async def test_ingest_writes_message_log(db_session):
 
     msg = _make_text_message(wa_id="+254799001002", msg_id="wamid.log_check")
 
-    await ingest_message(db_session, msg, None)
+    await ingest_message(db_session, msg, None, 1)
     await db_session.flush()
 
     result = await db_session.execute(
@@ -239,7 +239,7 @@ async def test_ingest_writes_event(db_session):
 
     msg = _make_text_message(wa_id="+254799001003", msg_id="wamid.event_check")
 
-    await ingest_message(db_session, msg, None)
+    await ingest_message(db_session, msg, None, 1)
     await db_session.flush()
 
     result = await db_session.execute(
@@ -264,11 +264,11 @@ async def test_ingest_deduplication(db_session):
 
     msg = _make_text_message(wa_id="+254799001004", msg_id="wamid.dedupe_test")
 
-    await ingest_message(db_session, msg, None)
+    await ingest_message(db_session, msg, None, 1)
     await db_session.flush()
 
     # Second call — should do nothing
-    await ingest_message(db_session, msg, None)
+    await ingest_message(db_session, msg, None, 1)
     await db_session.flush()
 
     # Only one ProcessedMessage row
@@ -294,7 +294,7 @@ async def test_ingest_opt_in_captured_on_first_contact(db_session):
 
     msg = _make_text_message(wa_id="+254799001005", msg_id="wamid.optin_check")
 
-    await ingest_message(db_session, msg, _make_contact("+254799001005", "Opt-In User"))
+    await ingest_message(db_session, msg, _make_contact("+254799001005", "Opt-In User"), 1)
     await db_session.flush()
 
     result = await db_session.execute(

@@ -12,16 +12,19 @@ from app.agents.state import AgentState
 from app.agents.tools.catalog import search_catalog, send_product_media
 from app.agents.tools.crm import flag_cancellation_pending, request_refund, update_crm
 from app.agents.tools.orders import cancel_order, create_order
-from app.agents.tools.payments import process_payment_receipt
 from app.llm.client import get_llm
 from app.config import get_settings
 
+# Note: receipt processing is intentionally NOT an LLM tool. The webhook
+# background task processes every inbound image deterministically (see
+# app/webhook/router.py) and hands the result to the agent via
+# state["receipt_status"] — the agent only relays it. This guarantees every
+# receipt reaches the CRM instead of depending on the LLM choosing to act.
 TOOLS = [
     search_catalog,
     send_product_media,
     create_order,
     cancel_order,
-    process_payment_receipt,
     update_crm,
     flag_cancellation_pending,
     request_refund,
@@ -92,6 +95,11 @@ STEP 3 — Payment (keep it casual):
   "Would you prefer bank transfer or cash on delivery?"
 
 STEP 4 — Call create_order(items_json, delivery_address, payment_method)
+  * The sku in items_json MUST be copied character-for-character from a
+    search_catalog result (shown as "SKU: ..."). Never construct or guess a
+    SKU from the product name. If you're not certain of the exact SKU —
+    especially if the catalog search happened several messages ago — call
+    search_catalog again first to get it fresh, rather than risk a typo'd SKU.
 
 STEP 5 — ALWAYS send the FULL receipt text returned by create_order EXACTLY as-is.
 Do NOT summarise, paraphrase, or omit any part of it. The receipt already has every line item,
@@ -115,7 +123,12 @@ Customer wants to change payment method after ordering:
 ## Payment Receipt
 Every receipt is reviewed by our team before the order is confirmed. There is NO auto-confirmation.
 
-When process_payment_receipt returns "PAYMENT_PENDING_REVIEW:":
+Receipt images are handled for you automatically — you do NOT call any tool for
+them. When "Receipt status" in Current Context below is set (not "none"), the
+customer just sent a receipt and it has ALREADY been logged for our team's review.
+Simply relay the appropriate message below based on its value.
+
+When "Receipt status" starts with "PAYMENT_PENDING_REVIEW:":
 "Thank you so much for sending your receipt! Our team is reviewing your payment right now — \
 this usually takes just a few minutes. Please hold tight and we'll confirm your order shortly. \
 We really appreciate your patience!"
@@ -186,7 +199,7 @@ Never promise a specific outcome — admin must approve the refund first.
 - Customer name   : {customer_name}
 - CRM stage       : {crm_stage}
 - Commerce mode   : {commerce_mode}
-- Pending receipt : {pending_media_id}
+- Receipt status  : {receipt_status}
 - Last order ref  : {last_order_ref}
 - Saved address   : {customer_delivery_address}
 """
@@ -211,7 +224,7 @@ def _system_message(state: AgentState) -> SystemMessage:
         business_description=bdesc,
         crm_stage=state.get("crm_stage", "lead"),
         commerce_mode=state.get("commerce_mode", "whatsapp_only"),
-        pending_media_id=state.get("pending_media_id") or "none",
+        receipt_status=_esc(state.get("receipt_status") or "none"),
         last_order_ref=state.get("last_order_ref") or "none",
         customer_delivery_address=addr,
     )

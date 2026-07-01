@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -11,6 +11,7 @@ from app.logging_config import get_logger, setup_logging
 from app.admin.router import router as admin_router
 from app.analytics.router import router as analytics_router
 from app.webhook.router import router as webhook_router
+from app.webhook.bridge import router as wa_bridge_router
 
 
 async def _auto_cancel_stale_pending() -> None:
@@ -33,9 +34,13 @@ async def _auto_cancel_stale_pending() -> None:
     from sqlalchemy import select as sa_select
 
     factory = get_session_factory()
+    settings = get_settings()
     try:
         async with factory() as db:
-            threshold_str = await get_setting(db, "auto_cancel_after_hours", "4")
+            threshold_str = await get_setting(
+                db, "auto_cancel_after_hours", "4",
+                tenant_id=settings.DEFAULT_TENANT_ID,
+            )
             try:
                 threshold = float(threshold_str)
             except ValueError:
@@ -47,7 +52,7 @@ async def _auto_cancel_stale_pending() -> None:
                 async with factory() as db:
                     async with db.begin():
                         from app.db.crud import get_order_by_ref
-                        fresh_order = await get_order_by_ref(db, order.order_ref)
+                        fresh_order = await get_order_by_ref(db, order.order_ref, tenant_id=order.tenant_id)
                         if fresh_order is None or fresh_order.cancellation_requested_at is None:
                             continue
                         await _cancel(db, fresh_order)
@@ -124,13 +129,23 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "POST"],
+    allow_origins=get_settings().cors_allowed_origins_list,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 app.include_router(webhook_router)
+app.include_router(wa_bridge_router)
 app.include_router(analytics_router)
 app.include_router(admin_router)
 

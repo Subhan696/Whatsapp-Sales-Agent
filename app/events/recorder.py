@@ -29,6 +29,7 @@ async def record_message_in(
     msg_type: str,
     body_or_summary: str,
 ) -> None:
+    tid = customer.tenant_id
     await create_message_log_entry(
         db,
         customer.id,
@@ -36,10 +37,12 @@ async def record_message_in(
         msg_type,
         body_or_summary,
         wa_message_id=wa_message_id,
+        tenant_id=tid,
     )
     await create_event(
         db,
         EventType.message_in,
+        tenant_id=tid,
         customer_id=customer.id,
         payload={
             "wa_message_id": wa_message_id,
@@ -56,6 +59,7 @@ async def record_message_out(
     *,
     wa_message_id: str | None = None,
 ) -> None:
+    tid = customer.tenant_id
     await create_message_log_entry(
         db,
         customer.id,
@@ -63,10 +67,12 @@ async def record_message_out(
         "text",
         body,
         wa_message_id=wa_message_id,
+        tenant_id=tid,
     )
     await create_event(
         db,
         EventType.message_out,
+        tenant_id=tid,
         customer_id=customer.id,
         payload={"summary": body[:500], "wa_message_id": wa_message_id},
     )
@@ -78,10 +84,13 @@ async def record_tool_call(
     tool_name: str,
     tool_input: dict[str, Any],
     tool_output: Any,
+    *,
+    tenant_id: int = 1,
 ) -> None:
     await create_event(
         db,
         EventType.tool_call,
+        tenant_id=tenant_id,
         customer_id=customer_id,
         payload={
             "tool": tool_name,
@@ -98,6 +107,7 @@ async def record_stage_change(
     *,
     metadata: dict[str, Any] | None = None,
 ) -> None:
+    tid = customer.tenant_id
     from_stage = customer.crm_stage
     await create_stage_history_entry(
         db,
@@ -105,11 +115,13 @@ async def record_stage_change(
         from_stage.value if from_stage else None,
         to_stage.value,
         metadata=metadata,
+        tenant_id=tid,
     )
     await update_customer(db, customer, crm_stage=to_stage)
     await create_event(
         db,
         EventType.stage_change,
+        tenant_id=tid,
         customer_id=customer.id,
         payload={
             "from_stage": from_stage.value if from_stage else None,
@@ -130,6 +142,7 @@ async def record_payment_verified(
     await create_event(
         db,
         EventType.payment_verified,
+        tenant_id=customer.tenant_id,
         customer_id=customer.id,
         payload={
             "order_ref": order_ref,
@@ -146,11 +159,13 @@ async def record_error(
     detail: str,
     *,
     customer_id: int | None = None,
+    tenant_id: int = 1,
     extra: dict[str, Any] | None = None,
 ) -> None:
     await create_event(
         db,
         EventType.error,
+        tenant_id=tenant_id,
         customer_id=customer_id,
         payload={"error_type": error_type, "detail": detail[:2000], **(extra or {})},
     )

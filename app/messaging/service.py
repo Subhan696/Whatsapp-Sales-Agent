@@ -72,6 +72,38 @@ def is_opt_out_keyword(body: str, settings: Settings) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Per-tenant client resolution
+# ---------------------------------------------------------------------------
+
+
+async def _get_client_for_tenant(
+    db: AsyncSession,
+    customer: Customer,
+    _client_override: WhatsAppClient | None,
+) -> WhatsAppClient:
+    """Return the right WhatsApp client for this customer's tenant.
+
+    Priority:
+      1. Explicit ``_client_override`` (test injection — bypasses all DB lookups).
+      2. When CHANNEL_PROVIDER=meta and the tenant has ``meta_access_token`` in
+         AppSetting, build a per-call client with those credentials.
+      3. Fall back to the global singleton (env-based credentials).
+    """
+    if _client_override is not None:
+        return _client_override
+    cfg = get_settings()
+    if cfg.CHANNEL_PROVIDER == "meta":
+        token = await crud.get_setting(db, "meta_access_token", tenant_id=customer.tenant_id)
+        if token:
+            pid = (
+                await crud.get_setting(db, "meta_phone_number_id", tenant_id=customer.tenant_id)
+                or cfg.META_PHONE_NUMBER_ID
+            )
+            return WhatsAppClient.with_credentials(token, pid)
+    return get_whatsapp_client()
+
+
+# ---------------------------------------------------------------------------
 # Main send function
 # ---------------------------------------------------------------------------
 
@@ -93,7 +125,7 @@ async def send_text_message(
     ``_client`` and ``settings`` are injectable for tests.
     """
     cfg = settings or get_settings()
-    client = _client or get_whatsapp_client()
+    client = await _get_client_for_tenant(db, customer, _client)
 
     # 1. Opt-out check — hard block
     if customer.opt_in_status == OptInStatus.opted_out:
@@ -110,7 +142,7 @@ async def send_text_message(
         return _needs_template()
 
     # 3. Send via WhatsApp API
-    resp_data = await client.send_text(customer.wa_id, body)
+    resp_data = await client.send_text(customer.wa_id, body, tenant_id=customer.tenant_id)
     wa_mid = (resp_data.get("messages") or [{}])[0].get("id")
 
     # 4. Record in message_log + events
@@ -135,7 +167,7 @@ async def send_media_message(
     Enforces the same opt-out and 24-hour window checks as send_text_message.
     """
     cfg = settings or get_settings()
-    client = _client or get_whatsapp_client()
+    client = await _get_client_for_tenant(db, customer, _client)
 
     if customer.opt_in_status == OptInStatus.opted_out:
         logger.info("send_suppressed_opted_out", customer_id=customer.id)
@@ -146,9 +178,9 @@ async def send_media_message(
         return _needs_template()
 
     if media_type == "image":
-        resp_data = await client.send_image(customer.wa_id, link, caption)
+        resp_data = await client.send_image(customer.wa_id, link, caption, tenant_id=customer.tenant_id)
     elif media_type == "video":
-        resp_data = await client.send_video(customer.wa_id, link, caption)
+        resp_data = await client.send_video(customer.wa_id, link, caption, tenant_id=customer.tenant_id)
     else:
         raise ValueError(f"Unsupported media_type: {media_type!r}")
 

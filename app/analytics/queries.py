@@ -36,10 +36,12 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def get_funnel(db: AsyncSession) -> FunnelResponse:
+async def get_funnel(db: AsyncSession, *, tenant_id: int) -> FunnelResponse:
     """Count customers at each CRM stage and compute per-stage conversion rates."""
     rows = await db.execute(
-        select(Customer.crm_stage, func.count().label("cnt")).group_by(Customer.crm_stage)
+        select(Customer.crm_stage, func.count().label("cnt"))
+        .where(Customer.tenant_id == tenant_id)
+        .group_by(Customer.crm_stage)
     )
     counts: dict[str, int] = {str(row.crm_stage.value): row.cnt for row in rows}
     total = sum(counts.values())
@@ -58,7 +60,7 @@ async def get_funnel(db: AsyncSession) -> FunnelResponse:
     return FunnelResponse(stages=stages, total_customers=total, generated_at=_now())
 
 
-async def get_kpis(db: AsyncSession) -> KPIsResponse:
+async def get_kpis(db: AsyncSession, *, tenant_id: int) -> KPIsResponse:
     """Compute high-level KPIs from customers and orders tables."""
     # Customer stats
     cust_row = await db.execute(
@@ -70,7 +72,7 @@ async def get_kpis(db: AsyncSession) -> KPIsResponse:
             func.sum(
                 (Customer.crm_stage == CRMStage.closed_won).cast(type_=func.count().type)
             ).label("closed_won"),
-        )
+        ).where(Customer.tenant_id == tenant_id)
     )
     cr = cust_row.one()
     total_customers: int = cr.total or 0
@@ -83,7 +85,7 @@ async def get_kpis(db: AsyncSession) -> KPIsResponse:
             func.count().label("cnt"),
             func.coalesce(func.sum(Order.total), 0).label("revenue"),
             func.coalesce(func.avg(Order.total), 0).label("avg_val"),
-        ).where(Order.status == OrderStatus.paid)
+        ).where(Order.tenant_id == tenant_id, Order.status == OrderStatus.paid)
     )
     pr = paid_row.one()
     paid_count: int = pr.cnt or 0
@@ -92,7 +94,9 @@ async def get_kpis(db: AsyncSession) -> KPIsResponse:
 
     # Awaiting payment order count
     aw_row = await db.execute(
-        select(func.count()).where(Order.status == OrderStatus.awaiting_payment)
+        select(func.count()).where(
+            Order.tenant_id == tenant_id, Order.status == OrderStatus.awaiting_payment
+        )
     )
     orders_awaiting: int = aw_row.scalar_one() or 0
 
@@ -111,9 +115,11 @@ async def get_kpis(db: AsyncSession) -> KPIsResponse:
     )
 
 
-async def get_products_list(db: AsyncSession) -> ProductPageResponse:
+async def get_products_list(db: AsyncSession, *, tenant_id: int) -> ProductPageResponse:
     """Return all products (including inactive) with stock levels."""
-    rows = await db.execute(select(Product).order_by(Product.name))
+    rows = await db.execute(
+        select(Product).where(Product.tenant_id == tenant_id).order_by(Product.name)
+    )
     products = list(rows.scalars().all())
 
     low = sum(1 for p in products if 0 < p.stock <= 5)
@@ -144,6 +150,7 @@ async def get_products_list(db: AsyncSession) -> ProductPageResponse:
 async def get_orders_page(
     db: AsyncSession,
     *,
+    tenant_id: int,
     page: int = 1,
     per_page: int = 50,
     status: str | None = None,
@@ -154,10 +161,11 @@ async def get_orders_page(
 
     q = (
         select(Order)
+        .where(Order.tenant_id == tenant_id)
         .options(joinedload(Order.customer))
         .order_by(Order.created_at.desc())
     )
-    count_q = select(func.count()).select_from(Order)
+    count_q = select(func.count()).select_from(Order).where(Order.tenant_id == tenant_id)
 
     if status:
         q = q.where(Order.status == status)
@@ -199,13 +207,20 @@ async def get_orders_page(
 async def get_customers_page(
     db: AsyncSession,
     *,
+    tenant_id: int,
     page: int = 1,
     per_page: int = 50,
     stage: str | None = None,
 ) -> CustomerPageResponse:
     """Return a paginated list of customers, optionally filtered by CRM stage."""
-    q = select(Customer).order_by(Customer.last_inbound_at.desc().nullslast())
-    count_q = select(func.count()).select_from(Customer)
+    q = (
+        select(Customer)
+        .where(Customer.tenant_id == tenant_id)
+        .order_by(Customer.last_inbound_at.desc().nullslast())
+    )
+    count_q = (
+        select(func.count()).select_from(Customer).where(Customer.tenant_id == tenant_id)
+    )
 
     if stage:
         try:

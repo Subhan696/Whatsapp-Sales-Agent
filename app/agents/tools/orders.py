@@ -8,6 +8,7 @@ The agent confirms the cart with the customer BEFORE calling this tool.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated
@@ -25,6 +26,34 @@ logger = get_logger(__name__)
 _CENT = Decimal("0.01")
 
 
+def _tokens(s: str) -> list[str]:
+    return [t for t in re.split(r"[^a-z0-9]+", s.lower()) if t]
+
+
+def _sku_fuzzy_match(requested_sku: str, candidates: list) -> object | None:
+    """Recover from the model hallucinating a plausible-looking SKU instead of
+    copying the real one from search results — e.g. it saw "Smartphone Pro
+    128GB (SKU: PHONE-001)" several turns back and, by the time it places the
+    order, reconstructs "SMART-PRO-128" from the *name* instead of recalling
+    the literal SKU. Token-overlap match against each candidate's name: every
+    token in the requested string must appear (as a substring, either
+    direction) in the candidate's name. Only returns a match if exactly one
+    candidate qualifies — ambiguous matches are left to fail with the
+    original "not found" error rather than risk ordering the wrong product.
+    """
+    req_tokens = _tokens(requested_sku)
+    if not req_tokens:
+        return None
+
+    matches = []
+    for product in candidates:
+        name_tokens = _tokens(product.name)
+        if all(any(rt in nt or nt in rt for nt in name_tokens) for rt in req_tokens):
+            matches.append(product)
+
+    return matches[0] if len(matches) == 1 else None
+
+
 @tool
 async def create_order(
     items_json: str,
@@ -35,7 +64,11 @@ async def create_order(
     """Create an order for the confirmed cart.
 
     Args:
-        items_json: JSON array of cart items, e.g. '[{"sku":"ELEC-001","quantity":2}]'
+        items_json: JSON array of cart items. Format: [{"sku": <exact sku
+            from a search_catalog result>, "quantity": <int>}]. Each sku MUST
+            be copied verbatim from a search_catalog result — never invented
+            or guessed from the product name. If unsure of a SKU, call
+            search_catalog first.
         delivery_address: Full delivery address provided by the customer.
         payment_method: Either 'bank_transfer' or 'cod' (cash on delivery).
 
@@ -45,6 +78,7 @@ async def create_order(
     """
     commerce_mode = state.get("commerce_mode", "whatsapp_only")
     customer_id = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
 
     if payment_method not in ("bank_transfer", "cod"):
         return "ERROR: payment_method must be 'bank_transfer' or 'cod'."
@@ -54,17 +88,21 @@ async def create_order(
         raw = json.loads(items_json)
         items = [CartItem(**i) for i in raw]
     except Exception as exc:
-        return f"ERROR: invalid items_json — {exc}. Expected format: [{{'sku':'SKU','quantity':N}}]"
+        return (
+            f"ERROR: invalid items_json — {exc}. Expected format: "
+            "[{'sku': '<exact sku from search_catalog>', 'quantity': N}]"
+        )
 
     if not items:
         return "ERROR: no items provided."
 
     try:
         if commerce_mode == "website":
-            summary = await _shopify_order(items, customer_id)
+            summary = await _shopify_order(items, customer_id, tenant_id=tenant_id)
         else:
             summary = await _local_order(
                 items, customer_id,
+                tenant_id=tenant_id,
                 payment_method=payment_method,
                 delivery_address=delivery_address,
             )
@@ -77,6 +115,7 @@ async def create_order(
         "create_order",
         {"items": items_json, "payment_method": payment_method, "delivery_address": delivery_address},
         summary,
+        tenant_id=tenant_id,
     )
 
     return summary.display()
@@ -91,6 +130,7 @@ async def _local_order(
     items: list[CartItem],
     customer_id: int | None,
     *,
+    tenant_id: int,
     payment_method: str = "bank_transfer",
     delivery_address: str | None = None,
 ) -> OrderSummary:
@@ -108,7 +148,7 @@ async def _local_order(
     async with factory() as db:
         # Load admin-configured delivery charge and delivery estimate
         from app.db.crud import get_setting
-        dc_str = await get_setting(db, "delivery_charge", "0")
+        dc_str = await get_setting(db, "delivery_charge", "0", tenant_id=tenant_id)
         try:
             delivery_charge = Decimal(dc_str).quantize(_CENT, ROUND_HALF_UP)
         except Exception:
@@ -116,7 +156,7 @@ async def _local_order(
 
         # Calculate estimated delivery date (PKT = UTC+5)
         delivery_estimate: str | None = None
-        eta_str = await get_setting(db, "delivery_estimate_days", "")
+        eta_str = await get_setting(db, "delivery_estimate_days", "", tenant_id=tenant_id)
         if eta_str.strip():
             try:
                 days = int(eta_str.strip())
@@ -127,11 +167,39 @@ async def _local_order(
                 # Admin entered free text like "2-3 business days" — use as-is
                 delivery_estimate = eta_str.strip()
 
-        # First pass — validate all items exist, are active, and have enough stock
+        # First pass — validate all items exist, are active, and have enough
+        # stock. Tracks the resolved product alongside each item so the
+        # second pass (stock decrement) reuses it directly instead of
+        # re-looking-up by item.sku — which, after a fuzzy-match recovery
+        # below, may not be a real SKU at all.
+        resolved: list[tuple] = []
         for item in items:
-            product = await get_product_by_sku(db, item.sku)
+            product = await get_product_by_sku(db, item.sku, tenant_id=tenant_id)
             if product is None:
-                raise ValueError(f"Product '{item.sku}' not found in catalog")
+                # Exact SKU miss — try to recover from a hallucinated-but-
+                # close SKU before giving up (see _sku_fuzzy_match docstring).
+                from app.db.crud import search_products
+
+                candidates = await search_products(db, "", tenant_id=tenant_id)
+                recovered = _sku_fuzzy_match(item.sku, candidates)
+                if recovered is not None:
+                    logger.warning(
+                        "order_sku_fuzzy_recovered",
+                        requested_sku=item.sku,
+                        resolved_sku=recovered.sku,
+                        tenant_id=tenant_id,
+                    )
+                    product = recovered
+                else:
+                    # Actionable on purpose: this string is fed back to the
+                    # agent, which should re-search and retry with a real SKU
+                    # rather than apologize to the customer for a "catalog
+                    # error" it can fix itself.
+                    raise ValueError(
+                        f"SKU '{item.sku}' does not exist. Call search_catalog to get the "
+                        f"valid SKUs for what the customer wants, then retry create_order "
+                        f"with the exact SKU from the results. Do not invent SKUs."
+                    )
             if not product.active:
                 raise ValueError(f"'{product.name}' is no longer available")
             if product.stock < item.quantity:
@@ -152,15 +220,16 @@ async def _local_order(
                     "line_total": str(line_total),
                 }
             )
+            resolved.append((item, product))
 
         total = (subtotal + delivery_charge).quantize(_CENT, ROUND_HALF_UP)
 
         if customer_id is None:
             raise ValueError("customer_id not set in agent state")
 
-        # Second pass — decrement stock now that all checks passed
-        for item in items:
-            product = await get_product_by_sku(db, item.sku)
+        # Second pass — decrement stock now that all checks passed. Reuses
+        # the product resolved above (not a fresh lookup by item.sku).
+        for item, product in resolved:
             await decrement_product_stock(db, product, item.quantity)
 
         order = await create_order(
@@ -171,6 +240,7 @@ async def _local_order(
             subtotal=subtotal,
             delivery_charge=delivery_charge,
             total=total,
+            tenant_id=tenant_id,
             payment_method=payment_method,
             delivery_address=delivery_address,
         )
@@ -205,7 +275,9 @@ async def _local_order(
 # ---------------------------------------------------------------------------
 
 
-async def _shopify_order(items: list[CartItem], customer_id: int | None) -> OrderSummary:
+async def _shopify_order(
+    items: list[CartItem], customer_id: int | None, *, tenant_id: int
+) -> OrderSummary:
     settings = get_settings()
     base = f"https://{settings.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01"
     headers = {
@@ -254,6 +326,7 @@ async def _shopify_order(items: list[CartItem], customer_id: int | None) -> Orde
                 subtotal=subtotal,
                 delivery_charge=delivery_charge,
                 total=total,
+                tenant_id=tenant_id,
                 external_ref=checkout_url,
             )
             await db.commit()
@@ -294,6 +367,7 @@ async def cancel_order(
     the customer's CRM stage back.
     """
     customer_id: int | None = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
     wa_id: str = state.get("wa_id", "")
 
     try:
@@ -303,7 +377,7 @@ async def cancel_order(
         factory = get_session_factory()
         async with factory() as db:
             async with db.begin():
-                order = await get_order_by_ref(db, order_ref)
+                order = await get_order_by_ref(db, order_ref, tenant_id=tenant_id)
                 if order is None:
                     return f"ERROR: Order '{order_ref}' not found."
                 if customer_id is not None and order.customer_id != customer_id:
@@ -317,7 +391,7 @@ async def cancel_order(
                     )
                 await _cancel(db, order)
 
-        await _record(customer_id, "cancel_order", {"order_ref": order_ref}, order_ref)
+        await _record(customer_id, "cancel_order", {"order_ref": order_ref}, order_ref, tenant_id=tenant_id)
 
     except Exception as exc:
         logger.error("cancel_order_error", error=str(exc), order_ref=order_ref, wa_id=wa_id)
@@ -334,7 +408,7 @@ async def cancel_order(
 # ---------------------------------------------------------------------------
 
 
-async def _record(customer_id, tool_name, inp, output) -> None:
+async def _record(customer_id, tool_name, inp, output, *, tenant_id: int = 1) -> None:
     try:
         from app.db.base import get_session_factory
         from app.events.recorder import record_tool_call
@@ -342,6 +416,6 @@ async def _record(customer_id, tool_name, inp, output) -> None:
         factory = get_session_factory()
         async with factory() as db:
             async with db.begin():
-                await record_tool_call(db, customer_id, tool_name, inp, output)
+                await record_tool_call(db, customer_id, tool_name, inp, output, tenant_id=tenant_id)
     except Exception as exc:
         logger.warning("tool_event_record_failed", error=str(exc))

@@ -69,12 +69,12 @@ async def respond_node(state: AgentState) -> dict:
 
     try:
         from app.db.base import get_session_factory
-        from app.db.crud import get_customer_by_wa_id
+        from app.db.crud import get_customer_by_id
         from app.messaging.service import send_text_message
 
         factory = get_session_factory()
         async with factory() as db:
-            customer = await get_customer_by_wa_id(db, state["wa_id"])
+            customer = await get_customer_by_id(db, state["customer_id"])
             if customer:
                 await send_text_message(db, customer, content)
                 await db.commit()

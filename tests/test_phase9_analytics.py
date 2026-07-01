@@ -109,7 +109,7 @@ async def analytics_data(db_session: AsyncSession):
 async def test_funnel_counts_all_stages(analytics_data, db_session):
     from app.analytics.queries import get_funnel
 
-    result = await get_funnel(db_session)
+    result = await get_funnel(db_session, tenant_id=1)
 
     stage_map = {s.stage: s.count for s in result.stages}
     assert stage_map["lead"] == 2
@@ -123,7 +123,7 @@ async def test_funnel_counts_all_stages(analytics_data, db_session):
 async def test_funnel_stage_order(analytics_data, db_session):
     from app.analytics.queries import get_funnel
 
-    result = await get_funnel(db_session)
+    result = await get_funnel(db_session, tenant_id=1)
     stage_names = [s.stage for s in result.stages]
     assert stage_names == ["lead", "interested", "awaiting_payment", "closed_won"]
 
@@ -132,7 +132,7 @@ async def test_funnel_stage_order(analytics_data, db_session):
 async def test_funnel_first_stage_has_no_conversion_rate(analytics_data, db_session):
     from app.analytics.queries import get_funnel
 
-    result = await get_funnel(db_session)
+    result = await get_funnel(db_session, tenant_id=1)
     assert result.stages[0].conversion_rate is None
 
 
@@ -140,7 +140,7 @@ async def test_funnel_first_stage_has_no_conversion_rate(analytics_data, db_sess
 async def test_funnel_conversion_rates_computed(analytics_data, db_session):
     from app.analytics.queries import get_funnel
 
-    result = await get_funnel(db_session)
+    result = await get_funnel(db_session, tenant_id=1)
     # interested (2) / lead (2) = 1.0
     interested = next(s for s in result.stages if s.stage == "interested")
     assert interested.conversion_rate == 1.0
@@ -154,7 +154,7 @@ async def test_funnel_conversion_rates_computed(analytics_data, db_session):
 async def test_funnel_empty_db(db_session):
     from app.analytics.queries import get_funnel
 
-    result = await get_funnel(db_session)
+    result = await get_funnel(db_session, tenant_id=1)
     assert result.total_customers == 0
     for s in result.stages:
         assert s.count == 0
@@ -169,7 +169,7 @@ async def test_funnel_empty_db(db_session):
 async def test_kpis_customer_counts(analytics_data, db_session):
     from app.analytics.queries import get_kpis
 
-    result = await get_kpis(db_session)
+    result = await get_kpis(db_session, tenant_id=1)
     assert result.total_customers == 6
     assert result.opted_out_count == 1
     assert result.closed_won_count == 1
@@ -179,7 +179,7 @@ async def test_kpis_customer_counts(analytics_data, db_session):
 async def test_kpis_revenue(analytics_data, db_session):
     from app.analytics.queries import get_kpis
 
-    result = await get_kpis(db_session)
+    result = await get_kpis(db_session, tenant_id=1)
     assert result.paid_orders_count == 1
     assert result.total_revenue == Decimal("500.00")
     assert result.avg_order_value == Decimal("500.00")
@@ -189,7 +189,7 @@ async def test_kpis_revenue(analytics_data, db_session):
 async def test_kpis_orders_awaiting(analytics_data, db_session):
     from app.analytics.queries import get_kpis
 
-    result = await get_kpis(db_session)
+    result = await get_kpis(db_session, tenant_id=1)
     assert result.orders_awaiting_payment == 1
 
 
@@ -197,7 +197,7 @@ async def test_kpis_orders_awaiting(analytics_data, db_session):
 async def test_kpis_conversion_rate(analytics_data, db_session):
     from app.analytics.queries import get_kpis
 
-    result = await get_kpis(db_session)
+    result = await get_kpis(db_session, tenant_id=1)
     # 1 closed_won / 6 total = 0.1667
     assert 0.16 <= result.overall_conversion_rate <= 0.17
 
@@ -206,7 +206,7 @@ async def test_kpis_conversion_rate(analytics_data, db_session):
 async def test_kpis_empty_db(db_session):
     from app.analytics.queries import get_kpis
 
-    result = await get_kpis(db_session)
+    result = await get_kpis(db_session, tenant_id=1)
     assert result.total_customers == 0
     assert result.total_revenue == Decimal("0.00")
     assert result.overall_conversion_rate == 0.0
@@ -221,7 +221,7 @@ async def test_kpis_empty_db(db_session):
 async def test_customers_page_total(analytics_data, db_session):
     from app.analytics.queries import get_customers_page
 
-    result = await get_customers_page(db_session)
+    result = await get_customers_page(db_session, tenant_id=1)
     assert result.total == 6
     assert len(result.customers) == 6
 
@@ -230,7 +230,7 @@ async def test_customers_page_total(analytics_data, db_session):
 async def test_customers_page_stage_filter(analytics_data, db_session):
     from app.analytics.queries import get_customers_page
 
-    result = await get_customers_page(db_session, stage="interested")
+    result = await get_customers_page(db_session, tenant_id=1, stage="interested")
     assert result.total == 2
     assert all(c.crm_stage == "interested" for c in result.customers)
 
@@ -239,8 +239,8 @@ async def test_customers_page_stage_filter(analytics_data, db_session):
 async def test_customers_page_pagination(analytics_data, db_session):
     from app.analytics.queries import get_customers_page
 
-    page1 = await get_customers_page(db_session, page=1, per_page=4)
-    page2 = await get_customers_page(db_session, page=2, per_page=4)
+    page1 = await get_customers_page(db_session, tenant_id=1, page=1, per_page=4)
+    page2 = await get_customers_page(db_session, tenant_id=1, page=2, per_page=4)
     assert len(page1.customers) == 4
     assert len(page2.customers) == 2
     assert page1.total == page2.total == 6
@@ -250,7 +250,7 @@ async def test_customers_page_pagination(analytics_data, db_session):
 async def test_customers_page_invalid_stage_returns_all(analytics_data, db_session):
     from app.analytics.queries import get_customers_page
 
-    result = await get_customers_page(db_session, stage="nonexistent_stage")
+    result = await get_customers_page(db_session, tenant_id=1, stage="nonexistent_stage")
     assert result.total == 6
 
 
@@ -258,7 +258,7 @@ async def test_customers_page_invalid_stage_returns_all(analytics_data, db_sessi
 async def test_customers_page_fields(analytics_data, db_session):
     from app.analytics.queries import get_customers_page
 
-    result = await get_customers_page(db_session, stage="closed_won")
+    result = await get_customers_page(db_session, tenant_id=1, stage="closed_won")
     assert result.total == 1
     c = result.customers[0]
     assert c.wa_id == "+1006"
@@ -277,11 +277,17 @@ async def test_analytics_endpoints_return_200(analytics_data, db_session: AsyncS
 
     Uses dependency_overrides to inject the test db_session so the HTTP layer
     sees the same data that analytics_data inserted, without triggering lifespan.
+    Analytics endpoints require X-Admin-Key, so a tenant with a known key is seeded.
     """
     from httpx import ASGITransport, AsyncClient
 
+    from app.crypto import hash_key
     from app.db.base import get_db
+    from app.db.models import Tenant
     from app.main import app
+
+    db_session.add(Tenant(id=1, name="Test Tenant", admin_api_key_hash=hash_key("test-admin-key"), status="active"))
+    await db_session.flush()
 
     async def override_get_db():
         yield db_session
@@ -292,7 +298,7 @@ async def test_analytics_endpoints_return_200(analytics_data, db_session: AsyncS
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             for path in ["/analytics/funnel", "/analytics/kpis", "/analytics/customers"]:
-                r = await client.get(path)
+                r = await client.get(path, headers={"X-Admin-Key": "test-admin-key"})
                 assert r.status_code == 200, f"{path} returned {r.status_code}: {r.text}"
                 data = r.json()
                 assert "generated_at" in data, f"Missing generated_at in {path} response"

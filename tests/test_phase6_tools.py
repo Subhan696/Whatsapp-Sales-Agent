@@ -48,7 +48,7 @@ async def test_update_crm_valid_stage():
     state = {"wa_id": "+1111", "customer_id": 1, "commerce_mode": "whatsapp_only"}
     with (
         patch("app.db.base.get_session_factory", return_value=_crm_db_ctx()),
-        patch("app.db.crud.get_customer_by_wa_id",
+        patch("app.db.crud.get_customer_by_id",
               AsyncMock(return_value=_mock_customer_for_crm("lead"))),
         patch("app.db.crud.update_customer", AsyncMock()),
         patch("app.events.recorder.record_stage_change", AsyncMock()),
@@ -78,7 +78,7 @@ async def test_update_crm_all_valid_stages():
     for current_stage, target_stage in stages:
         with (
             patch("app.db.base.get_session_factory", return_value=_crm_db_ctx()),
-            patch("app.db.crud.get_customer_by_wa_id",
+            patch("app.db.crud.get_customer_by_id",
                   AsyncMock(return_value=_mock_customer_for_crm(current_stage))),
             patch("app.events.recorder.record_stage_change", AsyncMock()),
         ):
@@ -172,6 +172,50 @@ async def test_search_catalog_backend_error_returns_error_string():
 # ---------------------------------------------------------------------------
 # Order creation — input validation
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# SKU fuzzy-match recovery (real bug: model hallucinated "SMART-PRO-128"
+# instead of the actual SKU "PHONE-001" for "Smartphone Pro 128GB", several
+# turns after the catalog search that showed the real SKU — see _sku_fuzzy_match
+# docstring in app/agents/tools/orders.py)
+# ---------------------------------------------------------------------------
+
+
+def _product_stub(sku: str, name: str):
+    from types import SimpleNamespace
+    return SimpleNamespace(sku=sku, name=name)
+
+
+_CATALOG = [
+    _product_stub("PHONE-001", "Smartphone Pro 128GB"),
+    _product_stub("LAPTOP-001", "UltraBook Air 13-inch"),
+    _product_stub("WATCH-001", "Smartwatch Series 5"),
+]
+
+
+def test_sku_fuzzy_match_recovers_hallucinated_sku():
+    from app.agents.tools.orders import _sku_fuzzy_match
+
+    result = _sku_fuzzy_match("SMART-PRO-128", _CATALOG)
+    assert result is not None
+    assert result.sku == "PHONE-001"
+
+
+def test_sku_fuzzy_match_no_match_returns_none():
+    from app.agents.tools.orders import _sku_fuzzy_match
+
+    assert _sku_fuzzy_match("COMPLETELY-UNRELATED-999", _CATALOG) is None
+
+
+def test_sku_fuzzy_match_disambiguates_similar_names():
+    from app.agents.tools.orders import _sku_fuzzy_match
+
+    # "smart" alone is a substring of both "Smartphone" and "Smartwatch" —
+    # must not pick either one ambiguously.
+    assert _sku_fuzzy_match("SMART", _CATALOG) is None
+    # But a token unique to one product still resolves cleanly.
+    assert _sku_fuzzy_match("SMARTWATCH", _CATALOG).sku == "WATCH-001"
 
 
 @pytest.mark.asyncio

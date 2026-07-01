@@ -53,12 +53,27 @@ class WhatsAppClient:
         self._phone_number_id = settings.META_PHONE_NUMBER_ID
         self._auth_headers = {"Authorization": f"Bearer {settings.META_ACCESS_TOKEN}"}
 
+    @classmethod
+    def with_credentials(cls, access_token: str, phone_number_id: str) -> "WhatsAppClient":
+        """Factory for per-tenant clients — uses explicit credentials, not env settings."""
+        settings = get_settings()
+        instance = cls.__new__(cls)
+        instance._base_url = settings.meta_graph_base_url
+        instance._phone_number_id = phone_number_id
+        instance._auth_headers = {"Authorization": f"Bearer {access_token}"}
+        return instance
+
     def _http(self, timeout: httpx.Timeout = _SEND_TIMEOUT) -> httpx.AsyncClient:
         return httpx.AsyncClient(headers=self._auth_headers, timeout=timeout)
 
     @retry(**_RETRY)
-    async def send_text(self, to: str, body: str) -> dict:
-        """POST a free-form text message. Returns the Graph API JSON response."""
+    async def send_text(self, to: str, body: str, *, tenant_id: int | None = None) -> dict:
+        """POST a free-form text message. Returns the Graph API JSON response.
+
+        ``tenant_id`` is accepted but unused — per-tenant credentials are already
+        baked into this instance via ``with_credentials``. Kept so callers can
+        treat WhatsAppClient and WaWebClient interchangeably.
+        """
         url = f"{self._base_url}/{self._phone_number_id}/messages"
         payload = {
             "messaging_product": "whatsapp",
@@ -76,7 +91,9 @@ class WhatsAppClient:
         return data
 
     @retry(**_RETRY)
-    async def send_image(self, to: str, link: str, caption: str = "") -> dict:
+    async def send_image(
+        self, to: str, link: str, caption: str = "", *, tenant_id: int | None = None
+    ) -> dict:
         """Send an image by public HTTPS URL. Caption is shown below the image."""
         url = f"{self._base_url}/{self._phone_number_id}/messages"
         payload = {
@@ -95,7 +112,9 @@ class WhatsAppClient:
         return data
 
     @retry(**_RETRY)
-    async def send_video(self, to: str, link: str, caption: str = "") -> dict:
+    async def send_video(
+        self, to: str, link: str, caption: str = "", *, tenant_id: int | None = None
+    ) -> dict:
         """Send a video by public HTTPS URL. Caption is shown below the video."""
         url = f"{self._base_url}/{self._phone_number_id}/messages"
         payload = {
@@ -147,9 +166,22 @@ class WhatsAppClient:
 _whatsapp_client: WhatsAppClient | None = None
 
 
-def get_whatsapp_client() -> WhatsAppClient:
-    """Return module-level singleton, lazily initialised from settings."""
+def get_whatsapp_client():
+    """Return the active outbound client for the configured channel.
+
+    CHANNEL_PROVIDER=meta   → WhatsAppClient (official Cloud API)
+    CHANNEL_PROVIDER=wa_web → WaWebClient (whatsapp-web.js bridge)
+
+    Both expose the same surface — send_text / send_image / send_video /
+    download_media — so callers never branch on the channel.
+    """
+    settings = get_settings()
+    if settings.CHANNEL_PROVIDER == "wa_web":
+        from app.whatsapp.wa_web_client import get_wa_web_client
+
+        return get_wa_web_client()
+
     global _whatsapp_client
     if _whatsapp_client is None:
-        _whatsapp_client = WhatsAppClient(get_settings())
+        _whatsapp_client = WhatsAppClient(settings)
     return _whatsapp_client
