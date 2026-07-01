@@ -6,7 +6,7 @@ RUN addgroup --system app && adduser --system --ingroup app app
 WORKDIR /app
 
 # Install dependencies first (layer cache)
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir -e ".[dev]"
 
 # Copy source
