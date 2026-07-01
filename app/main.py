@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.logging_config import get_logger, setup_logging
 from app.admin.router import router as admin_router
 from app.analytics.router import router as analytics_router
+from app.auth.router import router as auth_router
 from app.webhook.router import router as webhook_router
 from app.webhook.bridge import router as wa_bridge_router
 
@@ -147,6 +148,7 @@ async def add_security_headers(request: Request, call_next):
 app.include_router(webhook_router)
 app.include_router(wa_bridge_router)
 app.include_router(analytics_router)
+app.include_router(auth_router)
 app.include_router(admin_router)
 
 

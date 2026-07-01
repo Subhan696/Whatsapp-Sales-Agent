@@ -791,6 +791,8 @@ async def create_tenant(
     db: AsyncSession,
     *,
     name: str,
+    email: str | None = None,
+    password_hash: str | None = None,
     whatsapp_number: str | None = None,
     phone_number_id: str | None = None,
     admin_api_key: str | None = None,
@@ -802,6 +804,8 @@ async def create_tenant(
 
     tenant = Tenant(
         name=name,
+        email=email,
+        password_hash=password_hash,
         whatsapp_number=whatsapp_number,
         phone_number_id=phone_number_id,
         admin_api_key_hash=hash_key(admin_api_key) if admin_api_key else None,
@@ -829,3 +833,14 @@ async def update_tenant(db: AsyncSession, tenant: Tenant, **kwargs: Any) -> Tena
     await db.flush()
     await db.refresh(tenant)
     return tenant
+
+
+async def get_tenant_by_email(db: AsyncSession, email: str) -> Tenant | None:
+    result = await db.execute(
+        select(Tenant).where(
+            Tenant.email == email,
+            Tenant.status == "active",
+        )
+    )
+    return result.scalar_one_or_none()
+

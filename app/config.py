@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # management is locked (fail closed, not open).
     SUPERADMIN_KEY: str = ""
 
+    # JWT secret for signing session tokens
+    JWT_SECRET: str = "change_me_in_production"
+
     # Master key for encrypting sensitive secrets at rest (e.g. meta_access_token
     # in AppSetting). Fernet key — generate with:
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

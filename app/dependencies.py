@@ -25,25 +25,31 @@ def _client_ip(request: Request) -> str:
 
 async def get_authenticated_tenant_id(
     request: Request,
+    authorization: str | None = Header(default=None),
     x_admin_key: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> int:
-    """Resolve the active tenant from the X-Admin-Key header.
-
-    The key — not a caller-supplied tenant id — determines which tenant's
-    data the request can touch. Raises 401 when the header is missing or
-    doesn't match an active tenant. Repeated failures from the same client
-    IP are rate-limited (see app.rate_limit).
-    """
     from app import rate_limit
+    from app.config import get_settings
+    import jwt
 
     rl_key = f"admin_auth:{_client_ip(request)}"
     if rate_limit.is_locked_out(rl_key):
         raise HTTPException(status_code=429, detail="Too many failed auth attempts — try again later")
 
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        try:
+            payload = jwt.decode(token, get_settings().JWT_SECRET, algorithms=["HS256"])
+            tenant_id_str = payload.get("sub")
+            if tenant_id_str:
+                return int(tenant_id_str)
+        except jwt.InvalidTokenError:
+            pass # Fallback to checking x_admin_key if present
+
     if not x_admin_key:
         rate_limit.record_failure(rl_key)
-        raise HTTPException(status_code=401, detail="Missing X-Admin-Key header")
+        raise HTTPException(status_code=401, detail="Missing Authentication Token or X-Admin-Key")
 
     from app.db.crud import get_tenant_by_api_key
 

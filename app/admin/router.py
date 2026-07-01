@@ -666,9 +666,40 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
                 display: flex; gap: 8px; flex-wrap: wrap; }
   .filter-bar select { padding: 5px 10px; border: 1px solid #e5e7eb; border-radius: 6px;
                        font-size: 12px; color: #374151; background: #fff; cursor: pointer; }
+
+  /* ---- Auth Overlay ---- */
+  .auth-overlay { position: fixed; inset: 0; background: #f0f2f5; z-index: 9999;
+                  display: flex; align-items: center; justify-content: center; }
+  .auth-box { background: #fff; width: 100%; max-width: 400px; padding: 30px;
+              border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.1); text-align: center; }
+  .auth-box h2 { font-size: 24px; font-weight: 700; margin-bottom: 20px; color: #1a1a2e; }
+  .auth-box input { width: 100%; padding: 10px 14px; margin-bottom: 12px;
+                    border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+  .auth-box button { width: 100%; padding: 12px; background: #6366f1; color: #fff;
+                     border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .auth-box button:hover { background: #4f46e5; }
+  .auth-box .toggle-link { margin-top: 16px; font-size: 13px; color: #6b7280; cursor: pointer; }
+  .auth-box .toggle-link span { color: #6366f1; font-weight: 600; }
+  .auth-error { color: #dc2626; font-size: 13px; margin-bottom: 12px; display: none; }
 </style>
 </head>
 <body>
+
+<div id="auth-overlay" class="auth-overlay" style="display:none">
+  <div class="auth-box">
+    <h2 id="auth-title">Welcome to CRM</h2>
+    <div id="auth-error" class="auth-error"></div>
+    <form id="auth-form" onsubmit="handleAuth(event)">
+      <input type="text" id="auth-business" placeholder="Business Name" style="display:none">
+      <input type="email" id="auth-email" placeholder="Email Address" required>
+      <input type="password" id="auth-password" placeholder="Password" required>
+      <button type="submit" id="auth-btn">Log In</button>
+    </form>
+    <div class="toggle-link" onclick="toggleAuthMode()">
+      <span id="auth-toggle-text">Don't have an account? Sign up</span>
+    </div>
+  </div>
+</div>
 
 <div class="topbar">
   <h1>Business <span>CRM</span></h1>
@@ -2017,21 +2048,75 @@ window.onerror = function(msg, src, line) {
 };
 
 // ---- Admin auth ----
-function getAdminKey() {
-  let k = localStorage.getItem('adminApiKey');
-  if (!k) {
-    k = prompt('Enter Admin API Key for this tenant:') || '';
-    if (k) localStorage.setItem('adminApiKey', k);
-  }
-  return k;
+let authMode = 'login'; // 'login' or 'signup'
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('auth-title').textContent = authMode === 'login' ? 'Welcome Back' : 'Create Account';
+  document.getElementById('auth-btn').textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
+  document.getElementById('auth-business').style.display = authMode === 'login' ? 'none' : 'block';
+  document.getElementById('auth-business').required = authMode === 'signup';
+  document.getElementById('auth-toggle-text').textContent = authMode === 'login' ? "Don't have an account? Sign up" : "Already have an account? Log in";
+  document.getElementById('auth-error').style.display = 'none';
 }
+
+async function handleAuth(e) {
+  e.preventDefault();
+  const btn = document.getElementById('auth-btn');
+  btn.disabled = true; btn.textContent = 'Please wait...';
+  
+  const email = document.getElementById('auth-email').value;
+  const password = document.getElementById('auth-password').value;
+  const business = document.getElementById('auth-business').value;
+  
+  const url = authMode === 'login' ? '/auth/login' : '/auth/signup';
+  const payload = authMode === 'login' ? { email, password } : { email, password, business_name: business };
+  
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Authentication failed');
+    
+    localStorage.setItem('adminApiKey', data.access_token);
+    document.getElementById('auth-overlay').style.display = 'none';
+    
+    if (authMode === 'signup' && data.admin_api_key) {
+      alert("Please save this API Key for webhooks: " + data.admin_api_key);
+    }
+    loadAll();
+  } catch(err) {
+    const errDiv = document.getElementById('auth-error');
+    errDiv.textContent = err.message;
+    errDiv.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
+}
+
+function getAdminKey() {
+  return localStorage.getItem('adminApiKey');
+}
+
+function showAuth() {
+  document.getElementById('auth-overlay').style.display = 'flex';
+}
+
 async function adminFetch(url, opts) {
   opts = opts || {};
-  opts.headers = Object.assign({}, opts.headers, {'X-Admin-Key': getAdminKey()});
+  let k = getAdminKey();
+  if (!k) {
+    showAuth();
+    throw new Error('Not logged in');
+  }
+  opts.headers = Object.assign({}, opts.headers, {'Authorization': 'Bearer ' + k});
   const r = await fetch(url, opts);
   if (r.status === 401) {
-    // Stored key was rejected — clear it so the next call re-prompts.
     localStorage.removeItem('adminApiKey');
+    showAuth();
+    throw new Error('Session expired');
   }
   return r;
 }

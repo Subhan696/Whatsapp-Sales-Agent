@@ -85,6 +85,8 @@ class Tenant(Base):
     # One-way SHA-256 hash of the admin API key — never the plaintext. The
     # plaintext is generated, shown to the caller once, and discarded.
     admin_api_key_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, server_default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
