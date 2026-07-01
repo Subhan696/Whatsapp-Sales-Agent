@@ -37,15 +37,11 @@ services:
     build: ./wa-bridge
     ports:
       - "3000:3000"
+    env_file:
+      - ./wa-bridge/.env
     environment:
-      - BRIDGE_PORT=3000
       - PYTHON_INBOUND_URL=http://app:8000/wa-bridge/inbound
-      - WA_BRIDGE_TOKEN=${WA_BRIDGE_TOKEN:-}
-      - WA_WEB_TENANT_IDS=${WA_WEB_TENANT_IDS:-1}
-      - WA_BRIDGE_DATABASE_URL=postgresql://${POSTGRES_USER:-wauser}:${POSTGRES_PASSWORD:-wapass}@postgres:5432/${POSTGRES_DB:-wa_agent}
-      - WA_LOG_LEVEL=silent
     depends_on:
-      - postgres
       - app
     restart: unless-stopped
 
