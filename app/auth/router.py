@@ -4,9 +4,9 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
-from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,8 +15,6 @@ from app.db.base import get_db
 from app.db.crud import create_tenant, get_tenant_by_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class SignupRequest(BaseModel):
@@ -58,8 +56,9 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
             detail="Email already registered",
         )
 
-    # Hash the password
-    hashed_password = pwd_context.hash(request.password)
+    # Hash the password using bcrypt directly
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(request.password.encode('utf-8'), salt).decode('utf-8')
 
     # Generate an admin API key for integrations/webhooks
     new_admin_key = secrets.token_urlsafe(32)
@@ -100,7 +99,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Incorrect email or password",
         )
 
-    if not pwd_context.verify(request.password, tenant.password_hash):
+    # Verify password
+    if not bcrypt.checkpw(request.password.encode('utf-8'), tenant.password_hash.encode('utf-8')):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
