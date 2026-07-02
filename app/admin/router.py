@@ -668,36 +668,129 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
                        font-size: 12px; color: #374151; background: #fff; cursor: pointer; }
 
   /* ---- Auth Overlay ---- */
-  .auth-overlay { position: fixed; inset: 0; background: #f0f2f5; z-index: 9999;
-                  display: flex; align-items: center; justify-content: center; }
-  .auth-box { background: #fff; width: 100%; max-width: 400px; padding: 30px;
-              border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.1); text-align: center; }
-  .auth-box h2 { font-size: 24px; font-weight: 700; margin-bottom: 20px; color: #1a1a2e; }
-  .auth-box input { width: 100%; padding: 10px 14px; margin-bottom: 12px;
-                    border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-  .auth-box button { width: 100%; padding: 12px; background: #6366f1; color: #fff;
-                     border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .auth-box button:hover { background: #4f46e5; }
-  .auth-box .toggle-link { margin-top: 16px; font-size: 13px; color: #6b7280; cursor: pointer; }
-  .auth-box .toggle-link span { color: #6366f1; font-weight: 600; }
-  .auth-error { color: #dc2626; font-size: 13px; margin-bottom: 12px; display: none; }
+  .auth-overlay { position: fixed; inset: 0; background: #0f0f1a; z-index: 9999;
+                  display: flex; align-items: stretch; }
+  .auth-brand { flex: 0 0 42%; background: linear-gradient(145deg, #312e81 0%, #1e1b4b 55%, #0f0c2e 100%);
+                display: flex; flex-direction: column; justify-content: center; padding: 60px 48px; color: #fff; }
+  .auth-brand-icon { font-size: 44px; margin-bottom: 18px; }
+  .auth-brand h2 { font-size: 28px; font-weight: 800; margin-bottom: 10px; letter-spacing: -.5px; }
+  .auth-brand p { font-size: 15px; color: #a5b4fc; margin-bottom: 36px; line-height: 1.6; }
+  .auth-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+  .auth-features li { font-size: 14px; color: #c7d2fe; display: flex; align-items: center; gap: 10px; }
+  .auth-features li::before { content: "✓"; background: #4f46e5; color: #fff; width: 20px; height: 20px;
+                               border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+                               font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .auth-form-panel { flex: 1; background: #fff; display: flex; flex-direction: column;
+                     justify-content: center; padding: 60px 56px; }
+  .auth-form-panel h3 { font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+  .auth-subtitle { font-size: 14px; color: #6b7280; margin-bottom: 28px; }
+  .auth-tabs { display: flex; margin-bottom: 26px; border-bottom: 2px solid #f3f4f6; gap: 4px; }
+  .auth-tab { background: none; border: none; padding: 10px 22px; font-size: 14px; font-weight: 600;
+              color: #9ca3af; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;
+              transition: color .2s, border-color .2s; }
+  .auth-tab.active { color: #6366f1; border-bottom-color: #6366f1; }
+  .auth-field { margin-bottom: 16px; }
+  .auth-field label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+  .auth-field input { width: 100%; padding: 11px 14px; border: 1.5px solid #e5e7eb; border-radius: 8px;
+                      font-size: 14px; color: #111827; box-sizing: border-box;
+                      transition: border-color .15s, box-shadow .15s; }
+  .auth-field input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+  .pw-wrap { position: relative; }
+  .pw-wrap input { padding-right: 44px; }
+  .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+               background: none; border: none; cursor: pointer; font-size: 16px; padding: 2px;
+               color: #9ca3af; line-height: 1; }
+  .auth-submit { width: 100%; padding: 12px; background: #6366f1; color: #fff; border: none;
+                 border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px;
+                 transition: background .15s, transform .1s; }
+  .auth-submit:hover { background: #4f46e5; }
+  .auth-submit:active { transform: scale(.98); }
+  .auth-submit:disabled { background: #a5b4fc; cursor: not-allowed; }
+  .auth-switch { margin-top: 22px; font-size: 13px; color: #6b7280; text-align: center; }
+  .auth-switch span { color: #6366f1; font-weight: 600; cursor: pointer; }
+  .auth-switch span:hover { text-decoration: underline; }
+  .auth-error { color: #dc2626; font-size: 13px; margin-bottom: 14px; padding: 10px 14px;
+                background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; display: none; }
+  .auth-apikey-panel { flex: 1; background: #fff; display: none; flex-direction: column;
+                       justify-content: center; align-items: center; padding: 60px 56px; text-align: center; }
+  .auth-apikey-panel.visible { display: flex; }
+  .apikey-icon { font-size: 48px; margin-bottom: 16px; }
+  .auth-apikey-panel h3 { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+  .auth-apikey-panel p { font-size: 14px; color: #6b7280; margin-bottom: 24px; line-height: 1.6; }
+  .apikey-value-wrap { display: flex; align-items: center; gap: 10px; background: #f8fafc;
+                       border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;
+                       margin-bottom: 24px; width: 100%; box-sizing: border-box; }
+  .apikey-value-wrap code { flex: 1; font-size: 12px; font-family: monospace; color: #334155;
+                             word-break: break-all; text-align: left; }
+  .apikey-copy-btn { background: #6366f1; color: #fff; border: none; border-radius: 6px;
+                     padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+  .apikey-copy-btn:hover { background: #4f46e5; }
+  .apikey-done-btn { background: #10b981; color: #fff; border: none; border-radius: 8px;
+                     padding: 12px 28px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .apikey-done-btn:hover { background: #059669; }
+  .auth-logout-btn { background: none; border: 1px solid rgba(255,255,255,.3); color: rgba(255,255,255,.75);
+                     padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all .15s; }
+  .auth-logout-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .topbar-user { font-size: 12px; color: rgba(255,255,255,.6); }
+  @media (max-width: 680px) {
+    .auth-brand { display: none; }
+    .auth-form-panel, .auth-apikey-panel { padding: 40px 24px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="auth-overlay" class="auth-overlay" style="display:none">
-  <div class="auth-box">
-    <h2 id="auth-title">Welcome to CRM</h2>
+  <div class="auth-brand">
+    <div class="auth-brand-icon">&#9889;</div>
+    <h2>WhatsApp AI</h2>
+    <p>Your intelligent sales assistant — automates conversations, manages orders, and closes deals 24/7.</p>
+    <ul class="auth-features">
+      <li>Automated customer replies via WhatsApp</li>
+      <li>Order &amp; inventory management</li>
+      <li>Real-time CRM &amp; analytics dashboard</li>
+      <li>Payment receipt verification</li>
+    </ul>
+  </div>
+  <div class="auth-form-panel" id="auth-form-panel">
+    <h3 id="auth-title">Welcome back</h3>
+    <p class="auth-subtitle" id="auth-subtitle">Sign in to your dashboard</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="setAuthMode('login')">Log In</button>
+      <button class="auth-tab" id="tab-signup" onclick="setAuthMode('signup')">Sign Up</button>
+    </div>
     <div id="auth-error" class="auth-error"></div>
     <form id="auth-form" onsubmit="handleAuth(event)">
-      <input type="text" id="auth-business" placeholder="Business Name" style="display:none">
-      <input type="email" id="auth-email" placeholder="Email Address" required>
-      <input type="password" id="auth-password" placeholder="Password" required>
-      <button type="submit" id="auth-btn">Log In</button>
+      <div class="auth-field" id="field-business" style="display:none">
+        <label for="auth-business">Business Name</label>
+        <input type="text" id="auth-business" placeholder="e.g. Acme Wholesale" autocomplete="organization">
+      </div>
+      <div class="auth-field">
+        <label for="auth-email">Email Address</label>
+        <input type="email" id="auth-email" placeholder="you@example.com" required autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label for="auth-password">Password</label>
+        <div class="pw-wrap">
+          <input type="password" id="auth-password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required autocomplete="current-password">
+          <button type="button" class="pw-toggle" onclick="togglePw()" title="Show password">&#128065;</button>
+        </div>
+      </div>
+      <button type="submit" id="auth-btn" class="auth-submit">Log In</button>
     </form>
-    <div class="toggle-link" onclick="toggleAuthMode()">
-      <span id="auth-toggle-text">Don't have an account? Sign up</span>
+    <p class="auth-switch" id="auth-switch-text">
+      Don&#39;t have an account? <span onclick="setAuthMode('signup')">Sign up free</span>
+    </p>
+  </div>
+  <div class="auth-apikey-panel" id="auth-apikey-panel">
+    <div class="apikey-icon">&#128273;</div>
+    <h3>Account Created!</h3>
+    <p>Save this API key — it is shown only once.<br>Use it to connect WhatsApp and webhooks.</p>
+    <div class="apikey-value-wrap">
+      <code id="apikey-value"></code>
+      <button class="apikey-copy-btn" onclick="copyApiKey()" id="copy-btn">Copy</button>
     </div>
+    <button class="apikey-done-btn" onclick="dismissApiKeyPanel()">I&#39;ve saved it &mdash; go to dashboard</button>
   </div>
 </div>
 
@@ -705,7 +798,9 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <h1>Business <span>CRM</span></h1>
   <div class="refresh-row">
     <span id="last-updated">Loading…</span>
+    <span class="topbar-user" id="topbar-user"></span>
     <button onclick="loadAll()">&#8635; Refresh</button>
+    <button class="auth-logout-btn" onclick="logout()">Log out</button>
   </div>
 </div>
 
@@ -2048,30 +2143,47 @@ window.onerror = function(msg, src, line) {
 };
 
 // ---- Admin auth ----
-let authMode = 'login'; // 'login' or 'signup'
+let authMode = 'login';
 
-function toggleAuthMode() {
-  authMode = authMode === 'login' ? 'signup' : 'login';
-  document.getElementById('auth-title').textContent = authMode === 'login' ? 'Welcome Back' : 'Create Account';
-  document.getElementById('auth-btn').textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
-  document.getElementById('auth-business').style.display = authMode === 'login' ? 'none' : 'block';
-  document.getElementById('auth-business').required = authMode === 'signup';
-  document.getElementById('auth-toggle-text').textContent = authMode === 'login' ? "Don't have an account? Sign up" : "Already have an account? Log in";
+function setAuthMode(mode) {
+  authMode = mode;
+  const isSignup = mode === 'signup';
+  document.getElementById('auth-title').textContent = isSignup ? 'Create your account' : 'Welcome back';
+  document.getElementById('auth-subtitle').textContent = isSignup ? 'Start managing your WhatsApp sales' : 'Sign in to your dashboard';
+  document.getElementById('auth-btn').textContent = isSignup ? 'Create Account' : 'Log In';
+  const bField = document.getElementById('field-business');
+  bField.style.display = isSignup ? 'block' : 'none';
+  document.getElementById('auth-business').required = isSignup;
+  const sw = document.getElementById('auth-switch-text');
+  sw.innerHTML = isSignup
+    ? "Already have an account? <span onclick=\"setAuthMode('login')\">Log in</span>"
+    : "Don't have an account? <span onclick=\"setAuthMode('signup')\">Sign up free</span>";
+  document.getElementById('tab-login').classList.toggle('active', !isSignup);
+  document.getElementById('tab-signup').classList.toggle('active', isSignup);
   document.getElementById('auth-error').style.display = 'none';
+}
+
+function togglePw() {
+  const inp = document.getElementById('auth-password');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
 }
 
 async function handleAuth(e) {
   e.preventDefault();
   const btn = document.getElementById('auth-btn');
   btn.disabled = true; btn.textContent = 'Please wait...';
-  
-  const email = document.getElementById('auth-email').value;
+  const errDiv = document.getElementById('auth-error');
+  errDiv.style.display = 'none';
+
+  const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
-  const business = document.getElementById('auth-business').value;
-  
+  const business = document.getElementById('auth-business').value.trim();
+
   const url = authMode === 'login' ? '/auth/login' : '/auth/signup';
-  const payload = authMode === 'login' ? { email, password } : { email, password, business_name: business };
-  
+  const payload = authMode === 'login'
+    ? { email, password }
+    : { email, password, business_name: business };
+
   try {
     const r = await fetch(url, {
       method: 'POST',
@@ -2080,20 +2192,43 @@ async function handleAuth(e) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'Authentication failed');
-    
+
     localStorage.setItem('adminApiKey', data.access_token);
-    document.getElementById('auth-overlay').style.display = 'none';
-    
+    localStorage.setItem('userEmail', email);
+    if (business) localStorage.setItem('userBusiness', business);
+    updateTopbarUser();
+
     if (authMode === 'signup' && data.admin_api_key) {
-      alert("Please save this API Key for webhooks: " + data.admin_api_key);
+      document.getElementById('apikey-value').textContent = data.admin_api_key;
+      document.getElementById('auth-form-panel').style.display = 'none';
+      document.getElementById('auth-apikey-panel').classList.add('visible');
+    } else {
+      document.getElementById('auth-overlay').style.display = 'none';
+      loadAll();
     }
-    loadAll();
   } catch(err) {
-    const errDiv = document.getElementById('auth-error');
     errDiv.textContent = err.message;
     errDiv.style.display = 'block';
   }
-  btn.disabled = false; btn.textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
+  btn.disabled = false;
+  btn.textContent = authMode === 'login' ? 'Log In' : 'Create Account';
+}
+
+function copyApiKey() {
+  const val = document.getElementById('apikey-value').textContent;
+  navigator.clipboard.writeText(val).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.style.background = '#10b981';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
+  });
+}
+
+function dismissApiKeyPanel() {
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('auth-apikey-panel').classList.remove('visible');
+  document.getElementById('auth-form-panel').style.display = '';
+  loadAll();
 }
 
 function getAdminKey() {
@@ -2102,6 +2237,21 @@ function getAdminKey() {
 
 function showAuth() {
   document.getElementById('auth-overlay').style.display = 'flex';
+  setAuthMode('login');
+}
+
+function logout() {
+  localStorage.removeItem('adminApiKey');
+  localStorage.removeItem('userEmail');
+  localStorage.removeItem('userBusiness');
+  document.getElementById('topbar-user').textContent = '';
+  showAuth();
+}
+
+function updateTopbarUser() {
+  const name = localStorage.getItem('userBusiness') || localStorage.getItem('userEmail') || '';
+  const el = document.getElementById('topbar-user');
+  if (el && name) el.textContent = name;
 }
 
 async function adminFetch(url, opts) {
@@ -2222,7 +2372,13 @@ document.getElementById('edit-product-overlay').addEventListener('click', functi
   if (e.target === this) closeEditProduct();
 });
 
-loadAll();
+// Check auth before loading — shows login screen immediately instead of waiting for API 401
+updateTopbarUser();
+if (!getAdminKey()) {
+  showAuth();
+} else {
+  loadAll();
+}
 setInterval(loadAll, 30000);  // auto-refresh every 30s
 </script>
 </body>
