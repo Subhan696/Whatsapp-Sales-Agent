@@ -785,10 +785,6 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   .auth-logout-btn { background: none; border: 1px solid rgba(255,255,255,.3); color: rgba(255,255,255,.75);
                      padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all .15s; }
   .auth-logout-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
-  .platform-admin-btn { background: none; border: 1px solid rgba(255,255,255,.2); color: rgba(255,255,255,.5);
-                        padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; transition: all .15s; }
-  .platform-admin-btn:hover { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.9); }
-  .platform-admin-btn.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
   .topbar-user { font-size: 12px; color: rgba(255,255,255,.6); }
   @media (max-width: 680px) {
     .auth-brand { display: none; }
@@ -796,7 +792,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   }
 </style>
 </head>
-<body>
+<body style="visibility:hidden">
 
 <div id="auth-overlay" class="auth-overlay" style="display:none">
   <div class="auth-brand">
@@ -858,13 +854,12 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     <span id="last-updated">Loading…</span>
     <span class="topbar-user" id="topbar-user"></span>
     <button onclick="loadAll()">&#8635; Refresh</button>
-    <button class="platform-admin-btn" id="platform-admin-btn" onclick="enterSuperadminMode()" title="Platform admin — manage tenants">&#9881; Platform</button>
     <button class="auth-logout-btn" onclick="logout()">Log out</button>
   </div>
 </div>
-<div id="impersonation-bar" style="display:none;background:#f59e0b;color:#78350f;padding:8px 24px;font-size:13px;font-weight:600;align-items:center;gap:12px;">
-  <span>&#128272; Viewing as: <span id="impersonation-name" style="font-weight:800"></span></span>
-  <button onclick="exitImpersonation()" style="background:#78350f;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">Exit &rarr; Back to Platform</button>
+<div id="imp-bar" style="display:none;background:#f59e0b;color:#78350f;padding:8px 24px;font-size:13px;font-weight:600;align-items:center;gap:12px;">
+  <span>&#128272; Impersonation mode &mdash; viewing as: <span id="imp-bar-name" style="font-weight:800"></span></span>
+  <button onclick="exitImpersonation()" style="background:#78350f;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">&#10005; Close Tab</button>
 </div>
 
 <div class="kpi-grid" id="kpi-grid">
@@ -927,7 +922,6 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <button class="tab" onclick="showTab('settings',this)">&#9881; Settings</button>
   <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this)">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
   <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this)">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
-  <button class="tab" id="tab-btn-tenants" onclick="showTab('tenants',this)" style="display:none">&#127970; Tenants</button>
 </div>
 
 <!-- ORDERS TAB -->
@@ -1249,37 +1243,6 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<!-- TENANTS TAB (Platform / superadmin only) -->
-<div class="panel" id="tab-tenants" style="display:none">
-  <div class="panel-header">
-    <h2>Tenants</h2>
-    <span class="count" id="tenants-count">0</span>
-    <button onclick="createTenantPrompt()"
-            style="margin-left:auto;background:#4f46e5;color:#fff;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">
-      + New Tenant
-    </button>
-  </div>
-  <p style="font-size:12px;color:#6b7280;margin:0 0 10px">
-    Requires the platform superadmin key — separate from any tenant's own admin key.
-  </p>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>WhatsApp Number</th>
-          <th>Phone Number ID</th>
-          <th>Status</th>
-          <th>Created</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="tenants-body"><tr><td colspan="7" class="empty"><div class="spinner"></div></td></tr></tbody>
-    </table>
-  </div>
-</div>
-
 <!-- ADD PRODUCT MODAL -->
 <div id="add-product-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -1392,7 +1355,7 @@ let productsBySku = {};
 
 // ---- Tab switching ----
 function showTab(name, btn) {
-  ['orders','customers','inventory','analytics','funnel','settings','refunds','receipts','tenants'].forEach(t => {
+  ['orders','customers','inventory','analytics','funnel','settings','refunds','receipts'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
@@ -1401,7 +1364,6 @@ function showTab(name, btn) {
   else if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
   if (name === 'refunds') loadRefunds();
   if (name === 'receipts') loadReceipts();
-  if (name === 'tenants') loadTenants();
   if (name === 'analytics') renderAnalytics();
 }
 
@@ -2318,140 +2280,6 @@ async function adminRequestResend(id) {
   } catch(e) { alert('Request failed: ' + e.message); }
 }
 
-// ---- Tenants (platform / superadmin) ----
-async function loadTenants() {
-  try {
-    const r = await superadminFetch('/admin/tenants');
-    if (!r.ok) {
-      const data = await r.json().catch(() => ({}));
-      document.getElementById('tenants-body').innerHTML =
-        '<tr><td colspan="7" class="empty" style="color:#dc2626">Error: ' + (data.detail || r.status) + '</td></tr>';
-      return;
-    }
-    renderTenants(await r.json());
-  } catch(e) {
-    document.getElementById('tenants-body').innerHTML = '<tr><td colspan="7" class="empty" style="color:#dc2626">Error: ' + e.message + '</td></tr>';
-  }
-}
-
-let tenantsById = {};
-function renderTenants(tenants) {
-  document.getElementById('tenants-count').textContent = tenants.length;
-  tenantsById = {};
-  tenants.forEach(t => { tenantsById[t.id] = t; });
-  if (!tenants.length) { document.getElementById('tenants-body').innerHTML = '<tr><td colspan="7" class="empty">No tenants yet</td></tr>'; return; }
-  document.getElementById('tenants-body').innerHTML = tenants.map(t => {
-    const active = t.status === 'active';
-    const statusBadge = active
-      ? '<span class="badge b-green">Active</span>'
-      : '<span class="badge b-gray">' + t.status + '</span>';
-    const btn = (label, color, onclick) =>
-      `<button onclick="${onclick}" style="background:${color};color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">${label}</button>`;
-    // The default tenant (id=1) can't be suspended or deleted — it's the fallback.
-    const suspendBtn = t.id === 1 ? ''
-      : active ? btn('Suspend', '#b45309', `setTenantStatus(${t.id},'inactive')`)
-               : btn('Activate', '#16a34a', `setTenantStatus(${t.id},'active')`);
-    const deleteBtn = t.id === 1 ? '' : btn('Delete', '#ef4444', `deleteTenant(${t.id})`);
-    return `<tr>
-      <td class="mono">${t.id}</td>
-      <td style="font-weight:600">${t.name}</td>
-      <td class="mono">${t.whatsapp_number || '—'}</td>
-      <td class="mono">${t.phone_number_id || '—'}</td>
-      <td>${statusBadge}</td>
-      <td style="white-space:nowrap;font-size:12px;color:#6b7280">${fmt_date(t.created_at)}</td>
-      <td>
-        <div style="display:flex;gap:5px;flex-wrap:wrap">
-          ${btn('View Dashboard', '#10b981', `impersonateTenant(${t.id},'${t.name.replace(/'/g,"\\'")}' )`)}
-          ${btn('Edit', '#6366f1', `editTenant(${t.id})`)}
-          ${btn('Rotate Key', '#d97706', `rotateTenantKey(${t.id})`)}
-          ${suspendBtn}
-          ${deleteBtn}
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-async function editTenant(id) {
-  const t = tenantsById[id];
-  if (!t) return;
-  const name = prompt('Tenant name:', t.name);
-  if (name === null) return;
-  const whatsapp_number = prompt('WhatsApp number (blank to clear):', t.whatsapp_number || '');
-  if (whatsapp_number === null) return;
-  const phone_number_id = prompt('Meta phone_number_id (blank to clear):', t.phone_number_id || '');
-  if (phone_number_id === null) return;
-  try {
-    const r = await superadminFetch('/admin/tenants/' + id, {
-      method: 'PATCH', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        name: name.trim(),
-        whatsapp_number: whatsapp_number.trim() || null,
-        phone_number_id: phone_number_id.trim() || null,
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
-    await loadTenants();
-  } catch(e) { alert('Request failed: ' + e.message); }
-}
-
-async function setTenantStatus(id, status) {
-  const verb = status === 'active' ? 'Activate' : 'Suspend';
-  if (!confirm(verb + ' tenant #' + id + '?' + (status === 'inactive' ? ' A suspended tenant cannot access the API or receive messages.' : ''))) return;
-  try {
-    const r = await superadminFetch('/admin/tenants/' + id, {
-      method: 'PATCH', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({status}),
-    });
-    const data = await r.json();
-    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
-    await loadTenants();
-  } catch(e) { alert('Request failed: ' + e.message); }
-}
-
-async function deleteTenant(id) {
-  if (!confirm('Delete tenant #' + id + ' permanently?\\n\\nOnly empty tenants (no customers/orders) can be deleted. To disable a tenant with data, use Suspend instead.')) return;
-  try {
-    const r = await superadminFetch('/admin/tenants/' + id, {method: 'DELETE'});
-    const data = await r.json().catch(()=>({}));
-    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
-    await loadTenants();
-  } catch(e) { alert('Request failed: ' + e.message); }
-}
-
-async function createTenantPrompt() {
-  const name = prompt('New tenant name:');
-  if (!name) return;
-  const whatsapp_number = prompt('WhatsApp number (optional, e.g. +15551234567):') || null;
-  const phone_number_id = prompt('Meta phone_number_id (optional, for webhook routing):') || null;
-  try {
-    const r = await superadminFetch('/admin/tenants', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, whatsapp_number, phone_number_id}),
-    });
-    const data = await r.json();
-    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
-    alert(
-      'Tenant created!\\n\\n' +
-      'Admin API Key (shown once — copy it now):\\n' + data.admin_api_key + '\\n\\n' +
-      'Give this key to the tenant — they enter it in their own dashboard session.'
-    );
-    await loadTenants();
-  } catch(e) { alert('Request failed: ' + e.message); }
-}
-
-async function rotateTenantKey(id) {
-  if (!confirm('Rotate the admin API key for tenant #' + id + '? The old key will stop working immediately.')) return;
-  try {
-    const r = await superadminFetch('/admin/tenants/' + id + '/rotate-key', {method: 'POST'});
-    const data = await r.json();
-    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
-    alert('New Admin API Key (shown once — copy it now):\\n' + data.admin_api_key);
-  } catch(e) { alert('Request failed: ' + e.message); }
-}
-
 // ---- Error banner ----
 function showBanner(msg) {
   let b = document.getElementById('err-banner');
@@ -2598,87 +2426,13 @@ async function adminFetch(url, opts) {
   return r;
 }
 
-// ---- Superadmin auth (platform-level — tenant management only) ----
-let _impersonatingOrigKey = null; // stores the real JWT while impersonating a tenant
-
-function getSuperadminKey() {
-  return localStorage.getItem('superadminKey') || '';
-}
-
-async function superadminFetch(url, opts) {
-  opts = opts || {};
-  const k = getSuperadminKey();
-  opts.headers = Object.assign({}, opts.headers, {'X-Superadmin-Key': k});
-  const r = await fetch(url, opts);
-  if (r.status === 401) {
-    localStorage.removeItem('superadminKey');
-    document.getElementById('tab-btn-tenants').style.display = 'none';
-    document.getElementById('platform-admin-btn').classList.remove('active');
-  }
-  return r;
-}
-
-async function enterSuperadminMode() {
-  const existing = getSuperadminKey();
-  const k = prompt('Enter Platform Admin Key:', existing) || '';
-  if (!k) return;
-  localStorage.setItem('superadminKey', k);
-  // Verify the key works
-  const r = await fetch('/admin/tenants', {headers: {'X-Superadmin-Key': k}});
-  if (r.status === 401) {
-    localStorage.removeItem('superadminKey');
-    alert('Invalid Platform Admin Key.');
-    return;
-  }
-  document.getElementById('tab-btn-tenants').style.display = '';
-  document.getElementById('platform-admin-btn').classList.add('active');
-  // Open the Tenants tab automatically
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
-  document.getElementById('tab-btn-tenants').classList.add('active');
-  document.getElementById('tab-tenants').style.display = '';
-  const tenants = await r.json().catch(() => []);
-  renderTenants(Array.isArray(tenants) ? tenants : []);
-}
-
-async function impersonateTenant(id, name) {
-  const k = getSuperadminKey();
-  if (!k) { alert('Enter Platform Admin Key first (click the Platform button).'); return; }
-  try {
-    const r = await fetch('/admin/tenants/' + id + '/impersonate', {
-      method: 'POST',
-      headers: {'X-Superadmin-Key': k}
-    });
-    const data = await r.json();
-    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
-    // Save current auth and switch to tenant JWT
-    _impersonatingOrigKey = getAdminKey();
-    localStorage.setItem('adminApiKey', data.access_token);
-    // Show impersonation banner
-    const bar = document.getElementById('impersonation-bar');
-    document.getElementById('impersonation-name').textContent = name + ' (#' + id + ')';
-    bar.style.display = 'flex';
-    // Switch to Orders tab and reload
-    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
-    document.querySelector('.tab').classList.add('active');
-    document.getElementById('tab-orders').style.display = '';
-    await loadAll();
-  } catch(e) { alert('Request failed: ' + e.message); }
-}
-
+// ---- Impersonation exit (called from imp-bar when opened via /superadmin) ----
 function exitImpersonation() {
-  if (_impersonatingOrigKey) {
-    localStorage.setItem('adminApiKey', _impersonatingOrigKey);
-    _impersonatingOrigKey = null;
-  }
-  document.getElementById('impersonation-bar').style.display = 'none';
-  // Re-open tenants tab
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
-  document.getElementById('tab-btn-tenants').classList.add('active');
-  document.getElementById('tab-tenants').style.display = '';
-  loadTenants();
+  localStorage.removeItem('adminApiKey');
+  localStorage.removeItem('_impersonating');
+  localStorage.removeItem('userBusiness');
+  localStorage.removeItem('userEmail');
+  window.close();
 }
 
 // ---- safe fetch helper ----
@@ -2766,22 +2520,414 @@ document.getElementById('edit-product-overlay').addEventListener('click', functi
   if (e.target === this) closeEditProduct();
 });
 
+// Handle impersonation token passed via URL hash from /superadmin
+(function() {
+  const h = location.hash;
+  if (h.startsWith('#imp=')) {
+    const parts = h.slice(5).split('|');
+    localStorage.setItem('adminApiKey', decodeURIComponent(parts[0]));
+    localStorage.setItem('_impersonating', parts.length > 1 ? decodeURIComponent(parts[1]) : 'Tenant');
+    history.replaceState(null, '', '/admin');
+  }
+})();
+
 // Check auth before loading — shows login screen immediately instead of waiting for API 401
 updateTopbarUser();
 if (!getAdminKey()) {
   showAuth();
 } else {
+  const _impName = localStorage.getItem('_impersonating');
+  if (_impName) {
+    document.getElementById('imp-bar').style.display = 'flex';
+    document.getElementById('imp-bar-name').textContent = _impName;
+  }
   loadAll();
 }
-// Restore superadmin mode if key is already stored
-if (getSuperadminKey()) {
-  document.getElementById('tab-btn-tenants').style.display = '';
-  document.getElementById('platform-admin-btn').classList.add('active');
-}
+document.body.style.visibility = '';
 setInterval(loadAll, 30000);  // auto-refresh every 30s
 </script>
 </body>
 </html>"""
+
+_SUPERADMIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Platform Admin &mdash; WhatsApp AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; background: #f3f4f6; color: #1e293b; min-height: 100vh; }
+
+    /* ---- Login page ---- */
+    #login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh;
+                  background: linear-gradient(145deg, #312e81 0%, #1e1b4b 55%, #0f0c2e 100%); }
+    .login-card { background: #fff; border-radius: 20px; padding: 40px 44px; width: 400px; max-width: 95vw;
+                  box-shadow: 0 24px 80px rgba(0,0,0,.45); }
+    .login-logo { font-size: 36px; margin-bottom: 10px; }
+    .login-card h1 { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 4px; }
+    .login-card p { font-size: 13px; color: #6b7280; margin-bottom: 28px; }
+    .lf { margin-bottom: 16px; }
+    .lf label { font-size: 11px; font-weight: 700; color: #374151; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+    .lf input { width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 14px;
+                outline: none; transition: border-color .15s; }
+    .lf input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+    .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff;
+                 border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    .login-btn:hover { opacity: .9; }
+    .login-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .login-err { color: #dc2626; font-size: 12px; margin-top: 10px; display: none; font-weight: 600; }
+
+    /* ---- Dashboard ---- */
+    #dashboard { display: none; min-height: 100vh; }
+    .topbar { background: linear-gradient(90deg, #1e1b4b, #4f46e5); color: #fff; padding: 0 24px; height: 56px;
+              display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+    .topbar h1 { font-size: 16px; font-weight: 800; letter-spacing: -.2px; }
+    .topbar h1 span { color: #a5b4fc; }
+    .logout-btn { background: none; border: 1px solid rgba(255,255,255,.3); color: rgba(255,255,255,.8);
+                  padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 600; }
+    .logout-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+    .stats-bar { display: flex; gap: 16px; padding: 20px 24px 0; flex-wrap: wrap; }
+    .stat-chip { background: #fff; border-radius: 14px; padding: 16px 22px; flex: 1; min-width: 140px;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.07); border-top: 3px solid transparent; }
+    .stat-chip.s-total  { border-top-color: #4f46e5; }
+    .stat-chip.s-active { border-top-color: #10b981; }
+    .stat-chip.s-sus    { border-top-color: #f59e0b; }
+    .stat-chip .slabel { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+    .stat-chip .sval   { font-size: 30px; font-weight: 800; color: #111; line-height: 1; }
+
+    .section { background: #fff; margin: 20px 24px; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.07); overflow: hidden; }
+    .section-hdr { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 10px; }
+    .section-hdr h2 { font-size: 13px; font-weight: 700; color: #111; flex: 1; }
+    .section-hdr .hint { font-size: 11px; color: #9ca3af; }
+
+    .create-form { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+    .fg label { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 4px; }
+    .fg input { width: 100%; padding: 8px 10px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; outline: none; }
+    .fg input:focus { border-color: #4f46e5; }
+    .create-btn { padding: 9px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 8px;
+                  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .create-btn:hover { background: #4338ca; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .5px;
+         padding: 10px 16px; text-align: left; background: #f9fafb; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+    td { padding: 12px 16px; border-bottom: 1px solid #f9fafb; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .mono { font-family: 'Consolas', 'SF Mono', monospace; font-size: 12px; }
+    .badge { padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+    .b-green { background: #d1fae5; color: #065f46; }
+    .b-gray  { background: #f3f4f6; color: #6b7280; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn { padding: 4px 10px; border: none; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; color: #fff; white-space: nowrap; }
+    .btn-indigo { background: #4f46e5; } .btn-indigo:hover { background: #4338ca; }
+    .btn-green  { background: #10b981; } .btn-green:hover  { background: #059669; }
+    .btn-amber  { background: #d97706; } .btn-amber:hover  { background: #b45309; }
+    .btn-red    { background: #ef4444; } .btn-red:hover    { background: #dc2626; }
+    .btn-yellow { background: #b45309; } .btn-yellow:hover { background: #92400e; }
+
+    .empty-msg { text-align: center; color: #9ca3af; padding: 40px 16px; font-size: 13px; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: #fff; padding: 10px 18px;
+             border-radius: 10px; font-size: 13px; font-weight: 600; display: none; z-index: 999;
+             box-shadow: 0 4px 16px rgba(0,0,0,.25); animation: slideUp .2s ease; }
+    #toast.show { display: block; }
+    @keyframes slideUp { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    .spinner { width: 18px; height: 18px; border: 2px solid #e5e7eb; border-top-color: #4f46e5;
+               border-radius: 50%; animation: spin .6s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 680px) {
+      .create-form { grid-template-columns: 1fr 1fr; }
+      .stats-bar { gap: 10px; }
+    }
+  </style>
+</head>
+<body style="visibility:hidden">
+
+<!-- LOGIN -->
+<div id="login-page">
+  <div class="login-card">
+    <div class="login-logo">&#9889;</div>
+    <h1>Platform Admin</h1>
+    <p>WhatsApp AI &mdash; Superadmin Portal</p>
+    <form id="login-form" onsubmit="doLogin(event)">
+      <div class="lf">
+        <label>Superadmin Key</label>
+        <input type="password" id="sa-key" placeholder="Enter platform admin key" autocomplete="current-password" autofocus>
+      </div>
+      <button type="submit" class="login-btn" id="login-btn">Sign In</button>
+      <p class="login-err" id="login-err"></p>
+    </form>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="topbar">
+    <h1>Platform <span>Admin</span> &mdash; WhatsApp AI</h1>
+    <button class="logout-btn" onclick="doLogout()">&#10005; Log out</button>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-chip s-total"><div class="slabel">Total Tenants</div><div class="sval" id="stat-total">—</div></div>
+    <div class="stat-chip s-active"><div class="slabel">Active</div><div class="sval" id="stat-active">—</div></div>
+    <div class="stat-chip s-sus"><div class="slabel">Suspended</div><div class="sval" id="stat-sus">—</div></div>
+  </div>
+
+  <!-- Create Account -->
+  <div class="section">
+    <div class="section-hdr">
+      <h2>&#10010; Create New Tenant Account</h2>
+      <span class="hint">Tenant will log in at /admin with these credentials</span>
+    </div>
+    <div class="create-form">
+      <div class="fg">
+        <label>Business Name *</label>
+        <input type="text" id="new-name" placeholder="Acme Electronics">
+      </div>
+      <div class="fg">
+        <label>Email *</label>
+        <input type="email" id="new-email" placeholder="owner@business.com">
+      </div>
+      <div class="fg">
+        <label>Temporary Password *</label>
+        <input type="password" id="new-pass" placeholder="Set a password">
+      </div>
+      <button class="create-btn" onclick="createAccount()">Create Account</button>
+    </div>
+  </div>
+
+  <!-- Tenant table -->
+  <div class="section" style="margin-bottom:32px">
+    <div class="section-hdr">
+      <h2>All Tenants</h2>
+      <span class="hint" id="refresh-hint"></span>
+      <button class="btn btn-indigo" onclick="loadTenants()" style="padding:4px 12px;font-size:11px">&#8635; Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Business Name</th>
+            <th>Email</th>
+            <th>WhatsApp</th>
+            <th>Status</th>
+            <th>Signed Up</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tenants-tbody">
+          <tr><td colspan="7" class="empty-msg"><div class="spinner"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SA_STORE = 'sa_key';
+
+function getSaKey() { return localStorage.getItem(SA_STORE) || ''; }
+
+let _toastTimer;
+function showToast(msg, isErr) {
+  clearTimeout(_toastTimer);
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#dc2626' : '#1e293b';
+  t.className = 'show';
+  _toastTimer = setTimeout(() => { t.className = ''; }, 3500);
+}
+
+async function saFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, {'X-Superadmin-Key': getSaKey()});
+  const r = await fetch(url, opts);
+  if (r.status === 401 || r.status === 403) {
+    localStorage.removeItem(SA_STORE);
+    showLoginPage();
+  }
+  return r;
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const key = document.getElementById('sa-key').value.trim();
+  if (!key) return;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-err');
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  errEl.style.display = 'none';
+  const r = await fetch('/admin/tenants', {headers: {'X-Superadmin-Key': key}});
+  if (r.ok) {
+    localStorage.setItem(SA_STORE, key);
+    showDashboard(await r.json());
+  } else {
+    errEl.textContent = 'Invalid key — check your SUPERADMIN_KEY environment variable.';
+    errEl.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = 'Sign In';
+}
+
+function doLogout() {
+  localStorage.removeItem(SA_STORE);
+  showLoginPage();
+}
+
+function showLoginPage() {
+  document.getElementById('login-page').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+}
+
+function showDashboard(tenants) {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  renderTenants(tenants);
+}
+
+async function loadTenants() {
+  document.getElementById('refresh-hint').textContent = 'Loading…';
+  const r = await saFetch('/admin/tenants');
+  if (!r || !r.ok) { document.getElementById('refresh-hint').textContent = ''; return; }
+  renderTenants(await r.json());
+  document.getElementById('refresh-hint').textContent = '';
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const s = (iso.includes('+') || iso.endsWith('Z')) ? iso : iso + 'Z';
+  return new Date(s).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+}
+
+function renderTenants(tenants) {
+  const total = tenants.length;
+  const active = tenants.filter(t => t.status === 'active').length;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-active').textContent = active;
+  document.getElementById('stat-sus').textContent = total - active;
+
+  const tbody = document.getElementById('tenants-tbody');
+  if (!total) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No tenants yet. Create one above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = tenants.map(t => {
+    const isActive = t.status === 'active';
+    const badge = isActive
+      ? '<span class="badge b-green">Active</span>'
+      : '<span class="badge b-gray">' + t.status + '</span>';
+    const toggleBtn = t.id === 1 ? '' : isActive
+      ? '<button class="btn btn-yellow" onclick="setStatus(' + t.id + ',\\'inactive\\')">Suspend</button>'
+      : '<button class="btn btn-green" onclick="setStatus(' + t.id + ',\\'active\\')">Activate</button>';
+    const viewBtn   = '<button class="btn btn-indigo" onclick="viewDashboard(' + t.id + ',\\'' + encodeURIComponent(t.name) + '\\')">View Dashboard</button>';
+    const rotateBtn = '<button class="btn btn-amber" onclick="rotateKey(' + t.id + ')">Rotate Key</button>';
+    const deleteBtn = t.id === 1 ? '' : '<button class="btn btn-red" onclick="deleteTenant(' + t.id + ')">Delete</button>';
+    return '<tr>'
+      + '<td class="mono">' + t.id + '</td>'
+      + '<td style="font-weight:700">' + t.name + '</td>'
+      + '<td class="mono">' + (t.email || '—') + '</td>'
+      + '<td class="mono">' + (t.whatsapp_number || '—') + '</td>'
+      + '<td>' + badge + '</td>'
+      + '<td style="color:#6b7280;font-size:12px;white-space:nowrap">' + fmtDate(t.created_at) + '</td>'
+      + '<td><div class="actions">' + viewBtn + rotateBtn + toggleBtn + deleteBtn + '</div></td>'
+      + '</tr>';
+  }).join('');
+}
+
+async function viewDashboard(id, encodedName) {
+  const r = await saFetch('/admin/tenants/' + id + '/impersonate', {method: 'POST'});
+  if (!r) return;
+  const data = await r.json();
+  if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
+  const url = '/admin#imp=' + encodeURIComponent(data.access_token) + '|' + encodedName;
+  window.open(url, '_blank');
+}
+
+async function setStatus(id, status) {
+  const verb = status === 'active' ? 'activate' : 'suspend';
+  if (!confirm('Are you sure you want to ' + verb + ' tenant #' + id + '?')) return;
+  const r = await saFetch('/admin/tenants/' + id, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status})
+  });
+  const data = await r.json();
+  if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
+  showToast('Tenant ' + (status === 'active' ? 'activated' : 'suspended'));
+  loadTenants();
+}
+
+async function rotateKey(id) {
+  if (!confirm('Rotate API key for tenant #' + id + '?\\nThe old key stops working immediately.')) return;
+  const r = await saFetch('/admin/tenants/' + id + '/rotate-key', {method: 'POST'});
+  const data = await r.json();
+  if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
+  showToast('Key rotated — copy it from the dialog');
+  setTimeout(() => { prompt('New Admin API Key for tenant #' + id + ' (copy this):', data.admin_api_key); }, 100);
+}
+
+async function deleteTenant(id) {
+  if (!confirm('Permanently delete tenant #' + id + '?\\n\\nOnly tenants with NO customers or orders can be deleted.\\nUse Suspend instead for tenants with data.')) return;
+  const r = await saFetch('/admin/tenants/' + id, {method: 'DELETE'});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
+  showToast('Tenant deleted');
+  loadTenants();
+}
+
+async function createAccount() {
+  const name  = document.getElementById('new-name').value.trim();
+  const email = document.getElementById('new-email').value.trim();
+  const pass  = document.getElementById('new-pass').value;
+  if (!name || !email || !pass) { showToast('All three fields are required', true); return; }
+  const r = await fetch('/auth/signup', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({business_name: name, email, password: pass})
+  });
+  const data = await r.json();
+  if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-email').value = '';
+  document.getElementById('new-pass').value = '';
+  showToast('Account created for ' + email);
+  if (data.admin_api_key) {
+    setTimeout(() => { prompt('Admin API Key for ' + email + ' (share with tenant for webhook use):', data.admin_api_key); }, 100);
+  }
+  loadTenants();
+}
+
+// ---- Init ----
+(function() {
+  const key = getSaKey();
+  if (key) {
+    fetch('/admin/tenants', {headers: {'X-Superadmin-Key': key}})
+      .then(r => {
+        if (r.ok) { return r.json().then(showDashboard); }
+        localStorage.removeItem(SA_STORE); showLoginPage();
+      })
+      .catch(() => showLoginPage())
+      .finally(() => { document.body.style.visibility = ''; });
+  } else {
+    showLoginPage();
+    document.body.style.visibility = '';
+  }
+})();
+</script>
+</body>
+</html>"""
+
+
+@router.get("/superadmin", response_class=HTMLResponse, include_in_schema=False)
+async def superadmin_page() -> HTMLResponse:
+    return HTMLResponse(_SUPERADMIN_HTML)
 
 
 @router.get("/admin/payment-verifications")
@@ -3101,6 +3247,7 @@ async def list_admin_tenants(
         {
             "id": t.id,
             "name": t.name,
+            "email": t.email,
             "whatsapp_number": t.whatsapp_number,
             "phone_number_id": t.phone_number_id,
             "status": t.status,
