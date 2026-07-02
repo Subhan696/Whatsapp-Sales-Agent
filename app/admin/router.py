@@ -731,6 +731,10 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   .auth-logout-btn { background: none; border: 1px solid rgba(255,255,255,.3); color: rgba(255,255,255,.75);
                      padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all .15s; }
   .auth-logout-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .platform-admin-btn { background: none; border: 1px solid rgba(255,255,255,.2); color: rgba(255,255,255,.5);
+                        padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; transition: all .15s; }
+  .platform-admin-btn:hover { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.9); }
+  .platform-admin-btn.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
   .topbar-user { font-size: 12px; color: rgba(255,255,255,.6); }
   @media (max-width: 680px) {
     .auth-brand { display: none; }
@@ -800,8 +804,13 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     <span id="last-updated">Loading…</span>
     <span class="topbar-user" id="topbar-user"></span>
     <button onclick="loadAll()">&#8635; Refresh</button>
+    <button class="platform-admin-btn" id="platform-admin-btn" onclick="enterSuperadminMode()" title="Platform admin — manage tenants">&#9881; Platform</button>
     <button class="auth-logout-btn" onclick="logout()">Log out</button>
   </div>
+</div>
+<div id="impersonation-bar" style="display:none;background:#f59e0b;color:#78350f;padding:8px 24px;font-size:13px;font-weight:600;align-items:center;gap:12px;">
+  <span>&#128272; Viewing as: <span id="impersonation-name" style="font-weight:800"></span></span>
+  <button onclick="exitImpersonation()" style="background:#78350f;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">Exit &rarr; Back to Platform</button>
 </div>
 
 <div class="kpi-grid" id="kpi-grid">
@@ -820,7 +829,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <button class="tab" onclick="showTab('settings',this)">&#9881; Settings</button>
   <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this)">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
   <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this)">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
-  <button class="tab" onclick="showTab('tenants',this)">&#127970; Tenants</button>
+  <button class="tab" id="tab-btn-tenants" onclick="showTab('tenants',this)" style="display:none">&#127970; Tenants</button>
 </div>
 
 <!-- ORDERS TAB -->
@@ -2035,6 +2044,7 @@ function renderTenants(tenants) {
       <td style="white-space:nowrap;font-size:12px;color:#6b7280">${fmt_date(t.created_at)}</td>
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${btn('View Dashboard', '#10b981', `impersonateTenant(${t.id},'${t.name.replace(/'/g,"\\'")}' )`)}
           ${btn('Edit', '#6366f1', `editTenant(${t.id})`)}
           ${btn('Rotate Key', '#d97706', `rotateTenantKey(${t.id})`)}
           ${suspendBtn}
@@ -2272,22 +2282,86 @@ async function adminFetch(url, opts) {
 }
 
 // ---- Superadmin auth (platform-level — tenant management only) ----
+let _impersonatingOrigKey = null; // stores the real JWT while impersonating a tenant
+
 function getSuperadminKey() {
-  let k = localStorage.getItem('superadminKey');
-  if (!k) {
-    k = prompt('Enter Superadmin Key (platform-level, for tenant management):') || '';
-    if (k) localStorage.setItem('superadminKey', k);
-  }
-  return k;
+  return localStorage.getItem('superadminKey') || '';
 }
+
 async function superadminFetch(url, opts) {
   opts = opts || {};
-  opts.headers = Object.assign({}, opts.headers, {'X-Superadmin-Key': getSuperadminKey()});
+  const k = getSuperadminKey();
+  opts.headers = Object.assign({}, opts.headers, {'X-Superadmin-Key': k});
   const r = await fetch(url, opts);
   if (r.status === 401) {
     localStorage.removeItem('superadminKey');
+    document.getElementById('tab-btn-tenants').style.display = 'none';
+    document.getElementById('platform-admin-btn').classList.remove('active');
   }
   return r;
+}
+
+async function enterSuperadminMode() {
+  const existing = getSuperadminKey();
+  const k = prompt('Enter Platform Admin Key:', existing) || '';
+  if (!k) return;
+  localStorage.setItem('superadminKey', k);
+  // Verify the key works
+  const r = await fetch('/admin/tenants', {headers: {'X-Superadmin-Key': k}});
+  if (r.status === 401) {
+    localStorage.removeItem('superadminKey');
+    alert('Invalid Platform Admin Key.');
+    return;
+  }
+  document.getElementById('tab-btn-tenants').style.display = '';
+  document.getElementById('platform-admin-btn').classList.add('active');
+  // Open the Tenants tab automatically
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+  document.getElementById('tab-btn-tenants').classList.add('active');
+  document.getElementById('tab-tenants').style.display = '';
+  const tenants = await r.json().catch(() => []);
+  renderTenants(Array.isArray(tenants) ? tenants : []);
+}
+
+async function impersonateTenant(id, name) {
+  const k = getSuperadminKey();
+  if (!k) { alert('Enter Platform Admin Key first (click the Platform button).'); return; }
+  try {
+    const r = await fetch('/admin/tenants/' + id + '/impersonate', {
+      method: 'POST',
+      headers: {'X-Superadmin-Key': k}
+    });
+    const data = await r.json();
+    if (!r.ok) { alert('Error: ' + (data.detail || r.status)); return; }
+    // Save current auth and switch to tenant JWT
+    _impersonatingOrigKey = getAdminKey();
+    localStorage.setItem('adminApiKey', data.access_token);
+    // Show impersonation banner
+    const bar = document.getElementById('impersonation-bar');
+    document.getElementById('impersonation-name').textContent = name + ' (#' + id + ')';
+    bar.style.display = 'flex';
+    // Switch to Orders tab and reload
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+    document.querySelector('.tab').classList.add('active');
+    document.getElementById('tab-orders').style.display = '';
+    await loadAll();
+  } catch(e) { alert('Request failed: ' + e.message); }
+}
+
+function exitImpersonation() {
+  if (_impersonatingOrigKey) {
+    localStorage.setItem('adminApiKey', _impersonatingOrigKey);
+    _impersonatingOrigKey = null;
+  }
+  document.getElementById('impersonation-bar').style.display = 'none';
+  // Re-open tenants tab
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+  document.getElementById('tab-btn-tenants').classList.add('active');
+  document.getElementById('tab-tenants').style.display = '';
+  loadTenants();
 }
 
 // ---- safe fetch helper ----
@@ -2378,6 +2452,11 @@ if (!getAdminKey()) {
   showAuth();
 } else {
   loadAll();
+}
+// Restore superadmin mode if key is already stored
+if (getSuperadminKey()) {
+  document.getElementById('tab-btn-tenants').style.display = '';
+  document.getElementById('platform-admin-btn').classList.add('active');
 }
 setInterval(loadAll, 30000);  // auto-refresh every 30s
 </script>
@@ -2831,6 +2910,28 @@ async def delete_admin_tenant(
     await db.delete(tenant)
     await db.commit()
     return {"deleted": tenant_id}
+
+
+@router.post("/admin/tenants/{tenant_id}/impersonate")
+async def impersonate_tenant(
+    tenant_id: int, db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
+) -> dict:
+    """Return a short-lived JWT that authenticates as the given tenant.
+    Superadmin-only. Lets platform admins inspect a tenant's dashboard."""
+    from datetime import timedelta
+
+    from app.auth.router import create_access_token
+    from app.db.crud import get_tenant_by_id
+
+    tenant = await get_tenant_by_id(db, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail=f"Tenant #{tenant_id} not found")
+
+    token = create_access_token(
+        data={"sub": str(tenant.id), "impersonated_by": "superadmin"},
+        expires_delta=timedelta(hours=2),
+    )
+    return {"access_token": token, "tenant_id": tenant.id, "tenant_name": tenant.name}
 
 
 @router.get("/admin/audit-log")
