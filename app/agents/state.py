@@ -35,6 +35,11 @@ class AgentState(TypedDict):
     # Most recently created order reference (so CRM tool can attach it)
     last_order_ref: str | None
 
+    # Full summary of the latest active order (ref, items, total, address, status).
+    # Loaded fresh from DB each turn so the agent always knows what was ordered
+    # regardless of how long the conversation history is.
+    last_order_summary: str | None
+
     # Customer's saved delivery address (loaded from DB at ingest time)
     customer_delivery_address: str | None
 

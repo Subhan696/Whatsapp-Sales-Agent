@@ -81,9 +81,10 @@ async def search_catalog(
                 await _record(customer_id, "search_catalog",
                               {"query": query, "fallback": True, "sort_by": sort_by}, products,
                               tenant_id=tenant_id)
+                shown = products[:20]
                 header = f"No exact match for '{query}', but here is everything we currently have:\n"
                 lines = [header]
-                for p in products[:10]:
+                for p in shown:
                     lines.append(p.display())
                     lines.append("")
                 return "\n".join(lines).strip()
@@ -103,8 +104,9 @@ async def search_catalog(
         "price_desc": "sorted most expensive first",
     }.get(sort_by, f"matching '{query}'" if query else "currently in stock")
 
-    lines = [f"Here are {len(products)} product(s) {label}:\n"]
-    for p in products[:10]:
+    shown = products[:20]
+    lines = [f"Here are {len(shown)} product(s) {label}:\n"]
+    for p in shown:
         lines.append(p.display())
         lines.append("")
     return "\n".join(lines).strip()

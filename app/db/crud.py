@@ -219,7 +219,7 @@ async def search_products(
             | (func.lower(func.coalesce(cast(Product.tags, Text), "")).like(q_lower)),
         )
 
-    result = await db.execute(base.order_by(order_col).limit(20))
+    result = await db.execute(base.order_by(order_col).limit(30))
     return list(result.scalars().all())
 
 
@@ -409,6 +409,23 @@ async def get_latest_cancellable_order_ref(
     )
     row = result.scalar_one_or_none()
     return str(row) if row else None
+
+
+async def get_latest_active_order(
+    db: AsyncSession, customer_id: int, *, tenant_id: int
+) -> "Order | None":
+    """Return the most recent non-cancelled order for agent context (items, total, address)."""
+    result = await db.execute(
+        select(Order)
+        .where(
+            Order.customer_id == customer_id,
+            Order.tenant_id == tenant_id,
+            Order.status != OrderStatus.cancelled,
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def update_order_status(

@@ -42,6 +42,20 @@ def _get_customer_lock(customer_id: int) -> asyncio.Lock:
 router = APIRouter(tags=["webhook"])
 
 
+def _format_order_summary(order: object) -> str:
+    """Build a one-line order summary for the agent's system prompt."""
+    items_parts = []
+    for li in (order.line_items or []):  # type: ignore[union-attr]
+        name = li.get("name", li.get("sku", "item"))
+        qty = li.get("quantity", 1)
+        items_parts.append(f"{qty}x {name}")
+    items_str = ", ".join(items_parts) if items_parts else "no items"
+    total = f"PKR {order.total:,.2f}"  # type: ignore[union-attr]
+    addr = (order.delivery_address or "no address").replace("\n", " ")  # type: ignore[union-attr]
+    status = order.status.value if hasattr(order.status, "value") else str(order.status)  # type: ignore[union-attr]
+    return f"{order.order_ref} | {status} | {items_str} | {total} | {order.payment_method} | {addr}"  # type: ignore[union-attr]
+
+
 # ---------------------------------------------------------------------------
 # GET /webhook — Meta hub verification
 # ---------------------------------------------------------------------------
@@ -254,6 +268,7 @@ async def _process_message_background(
             from app.agents.graph import get_graph
             from app.db.crud import (
                 get_conversation_history,
+                get_latest_active_order,
                 get_latest_cancellable_order_ref,
                 get_setting,
             )
@@ -290,6 +305,10 @@ async def _process_message_background(
                 last_order_ref = await get_latest_cancellable_order_ref(
                     db, customer.id, tenant_id=tenant_id
                 )
+                _latest_order = await get_latest_active_order(
+                    db, customer.id, tenant_id=tenant_id
+                )
+                last_order_summary = _format_order_summary(_latest_order) if _latest_order else None
                 bank_transfer_details = await get_setting(
                     db, "bank_transfer_details", tenant_id=tenant_id
                 )
@@ -323,6 +342,7 @@ async def _process_message_background(
                 "pending_media_id": pending_media_id,
                 "receipt_status": receipt_status,
                 "last_order_ref": last_order_ref,
+                "last_order_summary": last_order_summary,
                 "customer_delivery_address": customer.delivery_address,
                 "bank_transfer_details": bank_transfer_details or None,
                 "business_name": business_name or None,
