@@ -20,7 +20,8 @@ services:
 
   app:
     build: .
-    # Port 8000 is NOT exposed publicly — nginx proxies to it on the internal network
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     environment:
