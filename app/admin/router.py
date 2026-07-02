@@ -588,19 +588,42 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   #last-updated { font-size: 12px; }
 
   /* ---- KPI cards ---- */
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr));
               gap: 16px; padding: 20px 24px 0; }
-  .kpi-card { background: #fff; border-radius: 12px; padding: 20px;
-              box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-  .kpi-card .label { font-size: 12px; color: #6b7280; text-transform: uppercase;
-                     letter-spacing: .5px; margin-bottom: 8px; }
-  .kpi-card .value { font-size: 28px; font-weight: 700; color: #1a1a2e; }
-  .kpi-card .sub   { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .kpi-card { background: #fff; border-radius: 14px; padding: 20px;
+              box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+              border-left: 4px solid transparent; position: relative; overflow: hidden; }
+  .kpi-card::after { content: ''; position: absolute; right: -16px; top: -16px;
+                     width: 72px; height: 72px; border-radius: 50%; opacity: .07; }
+  .kpi-icon { font-size: 22px; margin-bottom: 10px; display: block; }
+  .kpi-card .label { font-size: 11px; color: #6b7280; text-transform: uppercase;
+                     letter-spacing: .6px; margin-bottom: 6px; font-weight: 600; }
+  .kpi-card .value { font-size: 26px; font-weight: 800; color: #1a1a2e; line-height: 1.1; }
+  .kpi-card .sub   { font-size: 12px; color: #9ca3af; margin-top: 5px; }
+  .kpi-card.purple { border-left-color: #6366f1; }
   .kpi-card.purple .value { color: #6366f1; }
+  .kpi-card.purple::after { background: #6366f1; }
+  .kpi-card.green  { border-left-color: #16a34a; }
   .kpi-card.green  .value { color: #16a34a; }
+  .kpi-card.green::after { background: #16a34a; }
+  .kpi-card.amber  { border-left-color: #d97706; }
   .kpi-card.amber  .value { color: #d97706; }
+  .kpi-card.amber::after { background: #d97706; }
+  .kpi-card.blue   { border-left-color: #2563eb; }
   .kpi-card.blue   .value { color: #2563eb; }
+  .kpi-card.blue::after { background: #2563eb; }
+  .kpi-card.red    { border-left-color: #dc2626; }
   .kpi-card.red    .value { color: #dc2626; }
+  .kpi-card.red::after { background: #dc2626; }
+  .kpi-card.indigo { border-left-color: #4338ca; }
+  .kpi-card.indigo .value { color: #4338ca; }
+  .kpi-card.indigo::after { background: #4338ca; }
+  .kpi-card.teal   { border-left-color: #0d9488; }
+  .kpi-card.teal   .value { color: #0d9488; }
+  .kpi-card.teal::after { background: #0d9488; }
+  .kpi-card.rose   { border-left-color: #be123c; }
+  .kpi-card.rose   .value { color: #be123c; }
+  .kpi-card.rose::after { background: #be123c; }
 
   /* ---- Tabs ---- */
   .tabs { display: flex; gap: 4px; padding: 20px 24px 0; }
@@ -666,6 +689,37 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
                 display: flex; gap: 8px; flex-wrap: wrap; }
   .filter-bar select { padding: 5px 10px; border: 1px solid #e5e7eb; border-radius: 6px;
                        font-size: 12px; color: #374151; background: #fff; cursor: pointer; }
+
+  /* ---- Analytics tab ---- */
+  .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr));
+                    gap: 20px; padding: 20px; }
+  .analytics-card { background: #fff; border-radius: 12px; padding: 22px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .analytics-card h3 { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+                        letter-spacing: .6px; margin-bottom: 18px; display: flex;
+                        align-items: center; gap: 8px; }
+  .analytics-card h3 span { font-size: 16px; }
+  .chart-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .chart-label { font-size: 12px; color: #6b7280; width: 75px; flex-shrink: 0;
+                 text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chart-label.wide { width: 140px; }
+  .chart-bg { flex: 1; height: 20px; background: #f3f4f6; border-radius: 4px; overflow: hidden; }
+  .chart-fill { height: 100%; border-radius: 4px; min-width: 3px;
+                display: flex; align-items: center; padding-left: 7px; transition: width .5s ease; }
+  .chart-fill span { font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .chart-val { font-size: 12px; color: #374151; font-weight: 600; min-width: 64px; text-align: right; white-space: nowrap; }
+  .daybars { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px;
+             align-items: end; height: 90px; margin-bottom: 6px; }
+  .daybar  { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .daybar-fill { width: 100%; border-radius: 3px 3px 0 0; background: #6366f1;
+                 transition: height .4s ease; min-height: 2px; }
+  .daybar-lbl { font-size: 9px; color: #9ca3af; text-align: center; white-space: nowrap; }
+  .daybar-val { font-size: 9px; color: #374151; font-weight: 700; text-align: center; }
+  .stat-split { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat-block { flex: 1; min-width: 100px; padding: 14px; background: #f9fafb;
+                border-radius: 8px; text-align: center; }
+  .stat-block .s-val { font-size: 20px; font-weight: 800; color: #1a1a2e; }
+  .stat-block .s-lbl { font-size: 11px; color: #9ca3af; margin-top: 3px; }
 
   /* ---- Auth Overlay ---- */
   .auth-overlay { position: fixed; inset: 0; background: #0f0f1a; z-index: 9999;
@@ -814,17 +868,61 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="kpi-grid" id="kpi-grid">
-  <div class="kpi-card purple"><div class="label">Total Customers</div><div class="value" id="k-cust">…</div></div>
-  <div class="kpi-card green"><div class="label">Total Revenue</div><div class="value" id="k-rev">…</div><div class="sub" id="k-orders">… paid orders</div></div>
-  <div class="kpi-card amber"><div class="label">Awaiting Payment</div><div class="value" id="k-await">…</div><div class="sub">bank transfer pending</div></div>
-  <div class="kpi-card blue"><div class="label">Conversion Rate</div><div class="value" id="k-conv">…</div><div class="sub">lead → closed_won</div></div>
-  <div class="kpi-card red"><div class="label">Out of Stock</div><div class="value" id="k-oos">…</div><div class="sub" id="k-lowstock">… low stock</div></div>
+  <div class="kpi-card purple">
+    <span class="kpi-icon">&#128101;</span>
+    <div class="label">Total Customers</div>
+    <div class="value" id="k-cust">…</div>
+    <div class="sub" id="k-cust-new">— new this week</div>
+  </div>
+  <div class="kpi-card green">
+    <span class="kpi-icon">&#128176;</span>
+    <div class="label">Total Revenue</div>
+    <div class="value" id="k-rev">…</div>
+    <div class="sub" id="k-orders">… paid orders</div>
+  </div>
+  <div class="kpi-card amber">
+    <span class="kpi-icon">&#9203;</span>
+    <div class="label">Awaiting Payment</div>
+    <div class="value" id="k-await">…</div>
+    <div class="sub">bank transfers pending</div>
+  </div>
+  <div class="kpi-card blue">
+    <span class="kpi-icon">&#128200;</span>
+    <div class="label">Conversion Rate</div>
+    <div class="value" id="k-conv">…</div>
+    <div class="sub">lead &#8594; closed won</div>
+  </div>
+  <div class="kpi-card red">
+    <span class="kpi-icon">&#128230;</span>
+    <div class="label">Out of Stock</div>
+    <div class="value" id="k-oos">…</div>
+    <div class="sub" id="k-lowstock">… low stock</div>
+  </div>
+  <div class="kpi-card indigo">
+    <span class="kpi-icon">&#128717;</span>
+    <div class="label">Today&#39;s Orders</div>
+    <div class="value" id="k-today">…</div>
+    <div class="sub" id="k-today-rev">PKR 0 today</div>
+  </div>
+  <div class="kpi-card teal">
+    <span class="kpi-icon">&#129534;</span>
+    <div class="label">Avg Order Value</div>
+    <div class="value" id="k-avg">…</div>
+    <div class="sub">paid orders only</div>
+  </div>
+  <div class="kpi-card rose">
+    <span class="kpi-icon">&#10060;</span>
+    <div class="label">Cancelled Orders</div>
+    <div class="value" id="k-cancelled">…</div>
+    <div class="sub" id="k-cancel-rate">—% cancel rate</div>
+  </div>
 </div>
 
 <div class="tabs" id="tabs">
   <button class="tab active" onclick="showTab('orders',this)">&#128230; Orders</button>
   <button class="tab" onclick="showTab('customers',this)">&#128101; Customers</button>
   <button class="tab" onclick="showTab('inventory',this)">&#128230; Inventory</button>
+  <button class="tab" onclick="showTab('analytics',this)">&#128202; Analytics</button>
   <button class="tab" onclick="showTab('funnel',this)">&#128200; Funnel</button>
   <button class="tab" onclick="showTab('settings',this)">&#9881; Settings</button>
   <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this)">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
@@ -936,6 +1034,58 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       </thead>
       <tbody id="inventory-body"><tr><td colspan="9" class="empty"><div class="spinner"></div></td></tr></tbody>
     </table>
+  </div>
+</div>
+
+<!-- ANALYTICS TAB -->
+<div class="panel" id="tab-analytics" style="display:none">
+  <div class="panel-header"><h2>Analytics &amp; Record Keeping</h2></div>
+  <div class="analytics-grid">
+
+    <!-- Revenue last 7 days -->
+    <div class="analytics-card" style="grid-column: span 2">
+      <h3><span>&#128176;</span> Revenue — Last 7 Days</h3>
+      <div class="daybars" id="chart-rev-bars"></div>
+      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #f3f4f6;margin-top:6px">
+        <span style="font-size:11px;color:#9ca3af">7-day total: <strong id="chart-rev-7d" style="color:#16a34a">PKR 0</strong></span>
+        <span style="font-size:11px;color:#9ca3af">vs prev 7d: <strong id="chart-rev-delta" style="color:#6b7280">—</strong></span>
+      </div>
+    </div>
+
+    <!-- Orders by status -->
+    <div class="analytics-card">
+      <h3><span>&#128230;</span> Orders by Status</h3>
+      <div id="chart-status"></div>
+    </div>
+
+    <!-- Payment method split -->
+    <div class="analytics-card">
+      <h3><span>&#128180;</span> Payment Methods</h3>
+      <div id="chart-payment"></div>
+      <div class="stat-split" style="margin-top:16px" id="chart-payment-stats"></div>
+    </div>
+
+    <!-- Top products -->
+    <div class="analytics-card">
+      <h3><span>&#127942;</span> Top Products by Revenue</h3>
+      <div id="chart-products"></div>
+    </div>
+
+    <!-- New customers last 7 days -->
+    <div class="analytics-card">
+      <h3><span>&#128101;</span> New Customers — Last 7 Days</h3>
+      <div class="daybars" id="chart-cust-bars"></div>
+      <div style="padding-top:6px;border-top:1px solid #f3f4f6;margin-top:6px">
+        <span style="font-size:11px;color:#9ca3af">7-day total: <strong id="chart-cust-7d" style="color:#6366f1">0</strong> new customers</span>
+      </div>
+    </div>
+
+    <!-- Order timeline stats -->
+    <div class="analytics-card">
+      <h3><span>&#128197;</span> Period Breakdown</h3>
+      <div id="chart-period"></div>
+    </div>
+
   </div>
 </div>
 
@@ -1242,7 +1392,7 @@ let productsBySku = {};
 
 // ---- Tab switching ----
 function showTab(name, btn) {
-  ['orders','customers','inventory','funnel','settings','refunds','receipts','tenants'].forEach(t => {
+  ['orders','customers','inventory','analytics','funnel','settings','refunds','receipts','tenants'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
@@ -1252,6 +1402,7 @@ function showTab(name, btn) {
   if (name === 'refunds') loadRefunds();
   if (name === 'receipts') loadReceipts();
   if (name === 'tenants') loadTenants();
+  if (name === 'analytics') renderAnalytics();
 }
 
 // ---- Formatting helpers ----
@@ -1312,6 +1463,7 @@ function fmt_currency(v) {
 
 // ---- Render orders ----
 function renderOrders(data) {
+  allOrders = data.orders || [];
   const tbody = document.getElementById('orders-body');
   document.getElementById('orders-count').textContent = data.total;
   if (!data.orders.length) {
@@ -1377,6 +1529,7 @@ async function adminCancelOrder(orderRef, isPaid) {
 
 // ---- Render customers ----
 function renderCustomers(data) {
+  allCustomers = data.customers || [];
   const tbody = document.getElementById('customers-body');
   document.getElementById('customers-count').textContent = data.total;
   if (!data.customers.length) {
@@ -1423,13 +1576,177 @@ function renderFunnel(data) {
   }).join('') + `<p style="margin-top:16px;font-size:12px;color:#9ca3af">Total customers: ${data.total_customers}</p>`;
 }
 
+// ---- Analytics ----
+function renderAnalytics() {
+  if (!allOrders.length && !allCustomers.length) {
+    ['chart-rev-bars','chart-status','chart-payment','chart-products','chart-cust-bars','chart-period'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<div class="empty" style="padding:20px 0">No data yet</div>';
+    });
+    return;
+  }
+
+  // ---- Helpers ----
+  const barRow = (label, pct, val, color, wide) =>
+    `<div class="chart-row">
+      <div class="chart-label${wide?' wide':''}">${label}</div>
+      <div class="chart-bg"><div class="chart-fill" style="width:${pct}%;background:${color}"><span>${pct > 10 ? val : ''}</span></div></div>
+      <div class="chart-val">${val}</div>
+    </div>`;
+
+  const days7 = Array.from({length:7}, (_, i) => {
+    const d = new Date(Date.now() - (6-i)*86400000);
+    return { date: d.toDateString(), label: d.toLocaleDateString('en',{weekday:'short'}), iso: d.toISOString().slice(0,10) };
+  });
+
+  // ---- Revenue last 7 days ----
+  const revByDay = {};
+  days7.forEach(d => { revByDay[d.date] = 0; });
+  allOrders.filter(o => o.status === 'paid').forEach(o => {
+    const key = new Date(o.created_at).toDateString();
+    if (key in revByDay) revByDay[key] += parseFloat(o.total || 0);
+  });
+  const revVals = days7.map(d => revByDay[d.date]);
+  const maxRev = Math.max(...revVals, 1);
+  const total7d = revVals.reduce((a,b) => a+b, 0);
+  document.getElementById('chart-rev-bars').innerHTML = days7.map((d, i) => {
+    const h = Math.round((revVals[i] / maxRev) * 74);
+    const v = revVals[i] > 0 ? 'PKR ' + Math.round(revVals[i]).toLocaleString() : '';
+    return `<div class="daybar"><div class="daybar-val">${v}</div><div class="daybar-fill" style="height:${h}px;background:#16a34a"></div><div class="daybar-lbl">${d.label}</div></div>`;
+  }).join('');
+  document.getElementById('chart-rev-7d').textContent = fmt_currency(total7d);
+
+  // vs prev 7 days
+  const prev7start = Date.now() - 14*86400000;
+  const prev7end   = Date.now() - 7*86400000;
+  const prev7rev = allOrders.filter(o => o.status === 'paid' && new Date(o.created_at).getTime() >= prev7start && new Date(o.created_at).getTime() < prev7end)
+                            .reduce((s,o) => s + parseFloat(o.total||0), 0);
+  const deltaEl = document.getElementById('chart-rev-delta');
+  if (prev7rev > 0) {
+    const pct = ((total7d - prev7rev) / prev7rev * 100).toFixed(1);
+    deltaEl.textContent = (pct >= 0 ? '+' : '') + pct + '% vs prev week';
+    deltaEl.style.color = pct >= 0 ? '#16a34a' : '#dc2626';
+  } else { deltaEl.textContent = 'No prior data'; }
+
+  // ---- Orders by status ----
+  const statusColors = { paid:'#16a34a', awaiting_payment:'#d97706', pending_delivery:'#2563eb', cancelled:'#dc2626' };
+  const statusLabels = { paid:'Paid', awaiting_payment:'Awaiting Payment', pending_delivery:'Pending Delivery', cancelled:'Cancelled' };
+  const statusCount = {};
+  allOrders.forEach(o => { statusCount[o.status] = (statusCount[o.status]||0)+1; });
+  const maxStatus = Math.max(...Object.values(statusCount), 1);
+  document.getElementById('chart-status').innerHTML = Object.entries(statusLabels).map(([k,lbl]) => {
+    const cnt = statusCount[k] || 0;
+    const pct = Math.round((cnt / maxStatus) * 100);
+    return barRow(lbl, pct, cnt + ' orders', statusColors[k]||'#9ca3af', false);
+  }).join('');
+
+  // ---- Payment method split ----
+  const payCount = {}, payRev = {};
+  allOrders.filter(o=>o.status==='paid').forEach(o => {
+    const pm = o.payment_method || 'unknown';
+    payCount[pm] = (payCount[pm]||0)+1;
+    payRev[pm]   = (payRev[pm]||0) + parseFloat(o.total||0);
+  });
+  const payLabels = { cod:'Cash on Delivery', bank_transfer:'Bank Transfer', unknown:'Other' };
+  const maxPay = Math.max(...Object.values(payCount), 1);
+  const payColors = { cod:'#6366f1', bank_transfer:'#0d9488', unknown:'#9ca3af' };
+  document.getElementById('chart-payment').innerHTML = Object.entries(payLabels).map(([k,lbl]) => {
+    const cnt = payCount[k] || 0;
+    if (!cnt) return '';
+    const pct = Math.round((cnt / maxPay)*100);
+    return barRow(lbl, pct, cnt + ' orders', payColors[k], true);
+  }).join('') || '<div class="empty" style="padding:12px 0;font-size:12px">No paid orders yet</div>';
+  document.getElementById('chart-payment-stats').innerHTML = Object.entries(payLabels).map(([k,lbl]) => {
+    const r = payRev[k];
+    if (!r) return '';
+    return `<div class="stat-block"><div class="s-val" style="color:${payColors[k]}">${Math.round(r/1000)}K</div><div class="s-lbl">${lbl}</div></div>`;
+  }).join('');
+
+  // ---- Top products by revenue ----
+  const prodRev = {};
+  allOrders.filter(o=>o.status==='paid').forEach(o => {
+    (o.line_items||[]).forEach(li => {
+      const name = li.name || li.sku || '?';
+      const val = parseFloat(li.unit_price||li.price||0) * (li.qty||li.quantity||1);
+      prodRev[name] = (prodRev[name]||0) + val;
+    });
+  });
+  const topProds = Object.entries(prodRev).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxProd = topProds.length ? topProds[0][1] : 1;
+  document.getElementById('chart-products').innerHTML = topProds.length
+    ? topProds.map(([name,rev]) => barRow(name, Math.round((rev/maxProd)*100), fmt_currency(rev), '#6366f1', true)).join('')
+    : '<div class="empty" style="padding:12px 0;font-size:12px">No sales data yet</div>';
+
+  // ---- New customers last 7 days ----
+  const custByDay = {};
+  days7.forEach(d => { custByDay[d.date] = 0; });
+  allCustomers.forEach(c => {
+    if (!c.first_seen_at) return;
+    const key = new Date(c.first_seen_at).toDateString();
+    if (key in custByDay) custByDay[key]++;
+  });
+  const custVals = days7.map(d => custByDay[d.date]);
+  const maxCust = Math.max(...custVals, 1);
+  const total7dCust = custVals.reduce((a,b)=>a+b,0);
+  document.getElementById('chart-cust-bars').innerHTML = days7.map((d,i) => {
+    const h = Math.round((custVals[i]/maxCust)*74);
+    return `<div class="daybar"><div class="daybar-val">${custVals[i]||''}</div><div class="daybar-fill" style="height:${h}px;background:#6366f1"></div><div class="daybar-lbl">${d.label}</div></div>`;
+  }).join('');
+  document.getElementById('chart-cust-7d').textContent = total7dCust;
+
+  // ---- Period breakdown ----
+  const now = Date.now();
+  const cutoffs = { 'Today': new Date().setHours(0,0,0,0), 'This Week': now-7*86400000, 'This Month': now-30*86400000 };
+  const pd = document.getElementById('chart-period');
+  pd.innerHTML = Object.entries(cutoffs).map(([lbl, from]) => {
+    const ords = allOrders.filter(o => new Date(o.created_at).getTime() >= from);
+    const rev  = ords.filter(o=>o.status==='paid').reduce((s,o)=>s+parseFloat(o.total||0),0);
+    const newC = allCustomers.filter(c => c.first_seen_at && new Date(c.first_seen_at).getTime() >= from).length;
+    return `<div class="stat-row">
+      <span class="stat-label">${lbl}</span>
+      <span>
+        <span class="stat-value">${ords.length}</span>
+        <span style="font-size:11px;color:#9ca3af"> orders &nbsp;·&nbsp; </span>
+        <span class="stat-value" style="color:#16a34a">${fmt_currency(rev)}</span>
+        <span style="font-size:11px;color:#9ca3af"> &nbsp;·&nbsp; ${newC} new customers</span>
+      </span>
+    </div>`;
+  }).join('');
+}
+
 // ---- Render KPIs ----
 function renderKPIs(k) {
-  document.getElementById('k-cust').textContent  = k.total_customers;
-  document.getElementById('k-rev').textContent   = fmt_currency(k.total_revenue);
+  document.getElementById('k-cust').textContent   = k.total_customers;
+  document.getElementById('k-rev').textContent    = fmt_currency(k.total_revenue);
   document.getElementById('k-orders').textContent = k.paid_orders_count + ' paid orders';
-  document.getElementById('k-await').textContent = k.orders_awaiting_payment;
-  document.getElementById('k-conv').textContent  = (k.overall_conversion_rate * 100).toFixed(1) + '%';
+  document.getElementById('k-await').textContent  = k.orders_awaiting_payment;
+  document.getElementById('k-conv').textContent   = (k.overall_conversion_rate * 100).toFixed(1) + '%';
+}
+
+function refreshComputedKPIs() {
+  const today = new Date().toDateString();
+  const weekAgo = Date.now() - 7 * 86400000;
+
+  // Today's orders
+  const todayOrders = allOrders.filter(o => new Date(o.created_at).toDateString() === today);
+  const todayRev = todayOrders.reduce((s, o) => s + (o.status === 'paid' ? parseFloat(o.total || 0) : 0), 0);
+  document.getElementById('k-today').textContent = todayOrders.length;
+  document.getElementById('k-today-rev').textContent = fmt_currency(todayRev) + ' today';
+
+  // Avg order value (paid only)
+  const paidOrders = allOrders.filter(o => o.status === 'paid');
+  const avgVal = paidOrders.length ? paidOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0) / paidOrders.length : 0;
+  document.getElementById('k-avg').textContent = avgVal > 0 ? fmt_currency(avgVal) : 'N/A';
+
+  // Cancelled
+  const cancelled = allOrders.filter(o => o.status === 'cancelled').length;
+  const cancelRate = allOrders.length ? ((cancelled / allOrders.length) * 100).toFixed(1) : '0.0';
+  document.getElementById('k-cancelled').textContent = cancelled;
+  document.getElementById('k-cancel-rate').textContent = cancelRate + '% cancel rate';
+
+  // New customers this week
+  const newThisWeek = allCustomers.filter(c => c.first_seen_at && new Date(c.first_seen_at).getTime() >= weekAgo).length;
+  document.getElementById('k-cust-new').textContent = newThisWeek + ' new this week';
 }
 
 // ---- Render inventory ----
@@ -2429,6 +2746,9 @@ async function loadAll() {
     if (vPending > 0) { vBadge.textContent = vPending; vBadge.style.display = ''; }
     else vBadge.style.display = 'none';
   } catch(e) { /* non-critical */ }
+
+  // Compute derived KPIs from loaded data
+  refreshComputedKPIs();
 
   if (errs.length) {
     showBanner('Dashboard errors: ' + errs.join(' | '));
