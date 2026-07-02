@@ -2483,8 +2483,8 @@ function setAuthMode(mode) {
   document.getElementById('auth-business').required = isSignup;
   const sw = document.getElementById('auth-switch-text');
   sw.innerHTML = isSignup
-    ? "Already have an account? <span onclick=\"setAuthMode('login')\">Log in</span>"
-    : "Don't have an account? <span onclick=\"setAuthMode('signup')\">Sign up free</span>";
+    ? `Already have an account? <span onclick="setAuthMode('login')">Log in</span>`
+    : `Don't have an account? <span onclick="setAuthMode('signup')">Sign up free</span>`;
   document.getElementById('tab-login').classList.toggle('active', !isSignup);
   document.getElementById('tab-signup').classList.toggle('active', isSignup);
   document.getElementById('auth-error').style.display = 'none';
