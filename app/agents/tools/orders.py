@@ -404,6 +404,72 @@ async def cancel_order(
 
 
 # ---------------------------------------------------------------------------
+# Order payment method update tool
+# ---------------------------------------------------------------------------
+
+@tool
+async def update_payment_method(
+    order_ref: str,
+    payment_method: str,
+    state: Annotated[dict, InjectedState],
+) -> str:
+    """Update the payment method of an existing order and get the updated receipt.
+
+    Args:
+        order_ref: The order reference to update, e.g. ORD-2026-0001.
+                   Use the last_order_ref from context if the customer doesn't specify.
+        payment_method: Either 'bank_transfer' or 'cod' (cash on delivery).
+
+    Returns a full order summary (receipt) with the updated payment method.
+    Only updates orders that are awaiting_payment or pending_delivery.
+    Paid or cancelled orders cannot be updated.
+    """
+    customer_id: int | None = state.get("customer_id")
+    tenant_id: int = state.get("tenant_id") or 1
+    wa_id: str = state.get("wa_id", "")
+
+    if payment_method not in ("bank_transfer", "cod"):
+        return "ERROR: payment_method must be 'bank_transfer' or 'cod'."
+
+    try:
+        from app.db.base import get_session_factory
+        from app.db.crud import update_order_payment_method as _update_pm, get_order_by_ref
+
+        factory = get_session_factory()
+        async with factory() as db:
+            async with db.begin():
+                order = await get_order_by_ref(db, order_ref, tenant_id=tenant_id)
+                if order is None:
+                    return f"ERROR: Order '{order_ref}' not found."
+                if customer_id is not None and order.customer_id != customer_id:
+                    return f"ERROR: Order '{order_ref}' does not belong to this customer."
+                if order.status.value in ("cancelled", "paid"):
+                    return f"ERROR: Order {order_ref} is {order.status.value} and cannot have its payment method updated."
+                
+                await _update_pm(db, order, payment_method)
+
+                # Reconstruct OrderSummary to return updated receipt
+                summary = OrderSummary(
+                    order_ref=order.order_ref,
+                    mode=order.mode,
+                    line_items=order.line_items,
+                    subtotal=order.subtotal,
+                    delivery_charge=order.delivery_charge,
+                    total=order.total,
+                    payment_method=order.payment_method,
+                    delivery_estimate=None, # Usually not needed for update, but could be grabbed if we want
+                    external_ref=order.external_ref,
+                )
+
+        await _record(customer_id, "update_payment_method", {"order_ref": order_ref, "payment_method": payment_method}, summary.display(), tenant_id=tenant_id)
+
+    except Exception as exc:
+        logger.error("update_payment_method_error", error=str(exc), order_ref=order_ref, wa_id=wa_id)
+        return f"ERROR: payment method update failed — {exc}"
+
+    return summary.display()
+
+# ---------------------------------------------------------------------------
 # Event recording helper (shared)
 # ---------------------------------------------------------------------------
 

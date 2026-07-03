@@ -437,6 +437,23 @@ async def update_order_status(
     return order
 
 
+async def update_order_payment_method(
+    db: AsyncSession, order: Order, payment_method: str
+) -> Order:
+    if payment_method not in ("bank_transfer", "cod"):
+        raise ValueError("Invalid payment method")
+    
+    order.payment_method = payment_method
+    if payment_method == "cod":
+        order.status = OrderStatus.pending_delivery
+    else:
+        order.status = OrderStatus.awaiting_payment
+        
+    await db.flush()
+    await db.refresh(order)
+    return order
+
+
 # ---------------------------------------------------------------------------
 # Bank transactions
 # ---------------------------------------------------------------------------

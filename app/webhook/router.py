@@ -316,6 +316,9 @@ async def _process_message_background(
                 business_description = await get_setting(
                     db, "business_description", tenant_id=tenant_id
                 )
+                delivery_charge = await get_setting(
+                    db, "delivery_charge", "0", tenant_id=tenant_id
+                )
 
             # Rebuild conversation as LangChain messages (oldest → newest).
             # The current inbound message was already committed by ingest_message,
@@ -347,6 +350,7 @@ async def _process_message_background(
                 "bank_transfer_details": bank_transfer_details or None,
                 "business_name": business_name or None,
                 "business_description": business_description or None,
+                "delivery_charge": delivery_charge or None,
             }
             graph = get_graph()
             await graph.ainvoke(initial_state, config={})

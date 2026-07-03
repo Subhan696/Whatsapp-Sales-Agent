@@ -11,7 +11,7 @@ from langchain_core.messages import SystemMessage
 from app.agents.state import AgentState
 from app.agents.tools.catalog import search_catalog, send_product_media
 from app.agents.tools.crm import flag_cancellation_pending, request_refund, update_crm
-from app.agents.tools.orders import cancel_order, create_order
+from app.agents.tools.orders import cancel_order, create_order, update_payment_method
 from app.llm.client import get_llm
 from app.config import get_settings
 
@@ -25,6 +25,7 @@ TOOLS = [
     send_product_media,
     create_order,
     cancel_order,
+    update_payment_method,
     update_crm,
     flag_cancellation_pending,
     request_refund,
@@ -114,6 +115,10 @@ STEP 5 — ALWAYS send the FULL receipt text returned by create_order EXACTLY as
 Do NOT summarise, paraphrase, or omit any part of it. The receipt already has every line item,
 subtotal, delivery, and total formatted for WhatsApp. Send it word-for-word.
 
+## Delivery Policy
+Orders have a delivery charge of PKR {delivery_charge}. 
+ALWAYS add this delivery charge to the subtotal when quoting the final price to the customer BEFORE creating the order. Do not say there are no delivery charges unless it is actually 0.
+
 STEP 5 bank transfer — after sending the receipt, call update_crm(stage='awaiting_payment'), then add:
   "Please transfer the total to:
   {bank_transfer_details}
@@ -125,9 +130,8 @@ Thank you so much!"
 
 ## Payment Method Switch
 Customer wants to change payment method after ordering:
-1. cancel_order(order_ref=<last_order_ref>)
-2. update_crm(stage='interested')
-3. Back to STEP 3 — never create order #2 without cancelling #1
+1. Call update_payment_method(order_ref=<last_order_ref>, payment_method='bank_transfer' or 'cod')
+2. ALWAYS send the full updated receipt text returned by the tool EXACTLY as-is to the customer.
 
 ## Payment Receipt
 Every receipt is reviewed by our team before the order is confirmed. There is NO auto-confirmation.
@@ -243,6 +247,7 @@ def _system_message(state: AgentState) -> SystemMessage:
         last_order_ref=state.get("last_order_ref") or "none",
         last_order_summary=order_summary,
         customer_delivery_address=addr,
+        delivery_charge=_esc(state.get("delivery_charge") or "0"),
     )
     return SystemMessage(content=content)
 

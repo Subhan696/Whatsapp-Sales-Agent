@@ -52,3 +52,6 @@ class AgentState(TypedDict):
     # Admin-configured business identity (name + description of what the shop sells)
     business_name: str | None
     business_description: str | None
+
+    # Delivery charge configured by admin to be quoted before order creation
+    delivery_charge: str | None
