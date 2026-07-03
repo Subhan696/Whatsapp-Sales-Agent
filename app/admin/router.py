@@ -175,7 +175,7 @@ async def admin_cancel_order(
     )
     customer = cust_row.scalar_one_or_none()
     crm_changed = False
-    if customer and not await has_active_orders(db, customer.id):
+    if customer and not await has_active_orders(db, customer.id, tenant_id=_tid):
         if customer.crm_stage in (CRMStage.awaiting_payment, CRMStage.closed_won):
             await record_stage_change(db, customer, CRMStage.interested)
             await update_customer(db, customer, crm_stage=CRMStage.interested)
