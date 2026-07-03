@@ -1008,6 +1008,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     .panel { margin: 0; border-radius: 0; box-shadow: none; border-top: 1px solid #f0f0f0; }
     .table-wrap { padding: 16px; background: #f9fafb; overflow-x: hidden; }
     .analytics-grid { padding: 16px; grid-template-columns: 1fr; }
+    .analytics-card { grid-column: 1 / -1 !important; }
   }
 </style>
 </head>
