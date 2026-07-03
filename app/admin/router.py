@@ -863,50 +863,66 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   }
 
   
+  
   /* Modern Mobile App Principles */
+  .mobile-menu-btn { display: none; }
+  .topbar-left { display: flex; align-items: center; }
+
   @media (max-width: 768px) {
-    /* Bottom Navigation Bar for Tabs */
+    .mobile-menu-btn {
+      display: block !important;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 12px 0 0;
+      line-height: 1;
+    }
+    
+    /* Tabs as a Dropdown Menu */
     .tabs {
-      position: fixed;
-      bottom: 0;
+      position: absolute;
+      top: 60px;
       left: 0;
       right: 0;
       background: #fff;
-      padding: 10px 10px calc(env(safe-area-inset-bottom, 10px) + 10px) 10px;
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
-      z-index: 9999;
-      display: flex;
-      justify-content: flex-start;
-      border-radius: 0;
-      gap: 6px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .tabs::-webkit-scrollbar { display: none; }
-    .tab {
-      flex: 0 0 auto;
-      min-width: 65px;
       flex-direction: column;
-      padding: 8px 4px;
-      font-size: 10px;
-      background: transparent;
-      color: #9ca3af;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      padding: 12px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+      z-index: 1000;
+      display: none !important;
+      overflow: visible;
+      border-radius: 0 0 16px 16px;
       gap: 4px;
+    }
+    .tabs.open {
+      display: flex !important;
+      animation: slideDown 0.2s ease;
+    }
+    @keyframes slideDown {
+      from { transform: translateY(-10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .tab {
+      flex-direction: row;
+      justify-content: flex-start;
+      font-size: 14px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      color: #374151;
+      width: 100%;
+      text-align: left;
       border-bottom: none !important;
-      text-align: center;
     }
     .tab.active {
-      color: #25D366;
       background: #f0fdf4;
+      color: #075E54;
       box-shadow: none;
     }
     .tab.active::after { display: none; }
     
-    body { padding-bottom: 90px; }
+    body { padding-bottom: 20px; } /* Reset from bottom nav */
     
     /* KPI Cards - Wrap and reduce size */
     .kpi-grid { 
@@ -925,12 +941,12 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     .kpi-card .sub { font-size: 10px; }
 
     /* Topbar - Hide non-essential elements */
-    .topbar { padding: 0 12px; }
-    .topbar h1 { font-size: 14px; }
+    .topbar { padding: 0 12px; justify-content: space-between; }
+    .topbar h1 { font-size: 16px; }
     .wa-dot { width: 24px; height: 24px; font-size: 14px; }
     #topbar-user { display: none !important; }
     #last-updated { display: none !important; }
-    .refresh-row button { padding: 6px 10px; font-size: 11px; border-radius: 6px; }
+    .refresh-row button { padding: 8px 12px; font-size: 12px; border-radius: 8px; }
 
     /* Tables to Cards */
     table, thead, tbody, th, td, tr { display: block; width: 100%; box-sizing: border-box; }
@@ -1008,7 +1024,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     .panel { margin: 0; border-radius: 0; box-shadow: none; border-top: 1px solid #f0f0f0; }
     .table-wrap { padding: 16px; background: #f9fafb; overflow-x: hidden; }
     .analytics-grid { padding: 16px; grid-template-columns: 1fr; }
-    .analytics-card { grid-column: 1 / -1 !important; }
+    .analytics-card { grid-column: 1 / -1 !important; margin-bottom: 16px; }
   }
 </style>
 </head>
@@ -1074,7 +1090,10 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="topbar">
-  <h1><div class="wa-dot">&#128241;</div> Business <span>CRM</span></h1>
+  <div class="topbar-left">
+    <button class="mobile-menu-btn" onclick="document.getElementById('tabs').classList.toggle('open')">&#9776;</button>
+    <h1><div class="wa-dot">&#128241;</div> Business <span>CRM</span></h1>
+  </div>
   <div class="refresh-row">
     <span id="last-updated">Loading…</span>
     <span class="topbar-user" id="topbar-user"></span>
@@ -1139,14 +1158,14 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="tabs" id="tabs">
-  <button class="tab active" onclick="showTab('orders',this)">&#128230; Orders</button>
-  <button class="tab" onclick="showTab('customers',this)">&#128101; Customers</button>
-  <button class="tab" onclick="showTab('inventory',this)">&#128230; Inventory</button>
-  <button class="tab" onclick="showTab('analytics',this)">&#128202; Analytics</button>
-  <button class="tab" onclick="showTab('funnel',this)">&#128200; Funnel</button>
-  <button class="tab" onclick="showTab('settings',this)">&#9881; Settings</button>
-  <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this)">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
-  <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this)">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
+  <button class="tab active" onclick="showTab('orders',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128230; Orders</button>
+  <button class="tab" onclick="showTab('customers',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128101; Customers</button>
+  <button class="tab" onclick="showTab('inventory',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128230; Inventory</button>
+  <button class="tab" onclick="showTab('analytics',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128202; Analytics</button>
+  <button class="tab" onclick="showTab('funnel',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128200; Funnel</button>
+  <button class="tab" onclick="showTab('settings',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#9881; Settings</button>
+  <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
+  <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
 </div>
 
 <!-- ORDERS TAB -->
