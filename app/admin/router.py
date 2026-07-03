@@ -844,9 +844,22 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
                      padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all .15s; }
   .auth-logout-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .topbar-user { font-size: 12px; color: rgba(255,255,255,.6); }
-  @media (max-width: 680px) {
+
+  @media (max-width: 768px) {
+    .kpi-grid { grid-template-columns: 1fr 1fr; padding: 16px 16px 0; }
+    .analytics-grid { grid-template-columns: 1fr; padding: 16px; }
+    .topbar { padding: 0 16px; }
+    .panel { margin: 0 16px 16px; }
+    .filter-bar { padding: 12px 16px; }
+    .tabs { padding: 16px 16px 0; }
     .auth-brand { display: none; }
-    .auth-form-panel, .auth-apikey-panel { padding: 40px 24px; }
+    .auth-form-panel, .auth-apikey-panel { padding: 30px 20px; }
+  }
+  @media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+    .stat-split { flex-direction: column; }
+    .refresh-row span, .refresh-row button { font-size: 11px; }
+    .topbar h1 { font-size: 14px; }
   }
 </style>
 </head>
@@ -2775,7 +2788,16 @@ _SUPERADMIN_HTML = """<!DOCTYPE html>
       .create-form { grid-template-columns: 1fr 1fr; }
       .stats-bar { gap: 10px; }
     }
-  </style>
+  
+  @media (max-width: 768px) {
+    .create-form { grid-template-columns: 1fr; }
+    .create-form .create-btn { width: 100%; margin-top: 8px; }
+    .stats-bar { padding: 16px 16px 0; flex-direction: column; }
+    .section { margin: 16px; }
+    .topbar { padding: 0 16px; }
+    .login-card { padding: 32px 24px; }
+  }
+</style>
 </head>
 <body style="visibility:hidden">
 
