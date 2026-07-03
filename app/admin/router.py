@@ -862,6 +862,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     .topbar h1 { font-size: 14px; }
   }
 
+  
   /* Modern Mobile App Principles */
   @media (max-width: 768px) {
     /* Bottom Navigation Bar for Tabs */
@@ -871,16 +872,20 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       left: 0;
       right: 0;
       background: #fff;
-      padding: 10px 10px 24px 10px; /* Safe area */
+      padding: 10px 10px calc(env(safe-area-inset-bottom, 10px) + 10px) 10px;
       box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
       z-index: 9999;
       display: flex;
-      justify-content: space-around;
+      justify-content: flex-start;
       border-radius: 0;
-      gap: 2px;
+      gap: 6px;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
+    .tabs::-webkit-scrollbar { display: none; }
     .tab {
+      flex: 0 0 auto;
+      min-width: 65px;
       flex-direction: column;
       padding: 8px 4px;
       font-size: 10px;
@@ -892,7 +897,6 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       justify-content: center;
       gap: 4px;
       border-bottom: none !important;
-      flex: 1;
       text-align: center;
     }
     .tab.active {
@@ -902,8 +906,32 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     }
     .tab.active::after { display: none; }
     
-    body { padding-bottom: 90px; } /* Prevent content from being hidden under nav */
+    body { padding-bottom: 90px; }
     
+    /* KPI Cards - Wrap and reduce size */
+    .kpi-grid { 
+      grid-template-columns: repeat(2, 1fr) !important; 
+      gap: 12px; 
+      padding: 16px 16px 0; 
+    }
+    .kpi-card { 
+      padding: 14px; 
+      border-radius: 12px; 
+      margin-bottom: 0; 
+    }
+    .kpi-card .value { font-size: 20px; }
+    .kpi-card .label { font-size: 9px; margin-bottom: 4px; }
+    .kpi-card .kpi-icon { font-size: 18px; margin-bottom: 8px; }
+    .kpi-card .sub { font-size: 10px; }
+
+    /* Topbar - Hide non-essential elements */
+    .topbar { padding: 0 12px; }
+    .topbar h1 { font-size: 14px; }
+    .wa-dot { width: 24px; height: 24px; font-size: 14px; }
+    #topbar-user { display: none !important; }
+    #last-updated { display: none !important; }
+    .refresh-row button { padding: 6px 10px; font-size: 11px; border-radius: 6px; }
+
     /* Tables to Cards */
     table, thead, tbody, th, td, tr { display: block; width: 100%; box-sizing: border-box; }
     thead { display: none; }
@@ -974,13 +1002,12 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       margin-bottom: 8px;
       font-size: 14px;
       border-radius: 8px;
+      background: #f9fafb;
     }
     button, input { min-height: 44px; }
-    .kpi-card { padding: 20px 16px; border-radius: 16px; margin-bottom: 0; }
-    .topbar { padding: 0 16px; }
     .panel { margin: 0; border-radius: 0; box-shadow: none; border-top: 1px solid #f0f0f0; }
     .table-wrap { padding: 16px; background: #f9fafb; overflow-x: hidden; }
-    .analytics-grid { padding: 16px 0; }
+    .analytics-grid { padding: 16px; grid-template-columns: 1fr; }
   }
 </style>
 </head>
