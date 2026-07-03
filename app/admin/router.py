@@ -1106,6 +1106,11 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <button onclick="exitImpersonation()" style="background:#78350f;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">&#10005; Close Tab</button>
 </div>
 
+<div style="padding: 12px 24px 0; display: flex; justify-content: flex-end;">
+  <button onclick="toggleKPIs()" id="kpi-toggle-btn" style="background: rgba(0,0,0,0.05); border: none; padding: 4px 10px; border-radius: 12px; color: #6b7280; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: background 0.2s;">
+    &#128065; Hide Summary
+  </button>
+</div>
 <div class="kpi-grid" id="kpi-grid">
   <div class="kpi-card purple">
     <span class="kpi-icon">&#128101;</span>
@@ -2807,6 +2812,36 @@ if (!getAdminKey()) {
 document.body.style.cssText = 'visibility:visible;animation:fadeIn .35s ease';
 setInterval(loadAll, 30000);  // auto-refresh every 30s
 </script>
+
+<script>
+function toggleKPIs() {
+  const grid = document.getElementById('kpi-grid');
+  const btn = document.getElementById('kpi-toggle-btn');
+  // If we're on mobile, grid uses grid-template-columns: repeat(2, 1fr) !important, 
+  // so we should just toggle a hidden class or use display: none
+  if (grid.style.display === 'none') {
+    grid.style.display = ''; // revert to stylesheet display
+    btn.innerHTML = '&#128065; Hide Summary';
+    localStorage.setItem('hideKPIs', 'false');
+  } else {
+    grid.style.display = 'none';
+    btn.innerHTML = '&#128064; Show Summary';
+    localStorage.setItem('hideKPIs', 'true');
+  }
+}
+
+// Apply on load
+document.addEventListener("DOMContentLoaded", () => {
+  if (localStorage.getItem('hideKPIs') === 'true') {
+    const grid = document.getElementById('kpi-grid');
+    const btn = document.getElementById('kpi-toggle-btn');
+    if (grid && btn) {
+      grid.style.display = 'none';
+      btn.innerHTML = '&#128064; Show Summary';
+    }
+  }
+});
+</script>
 </body>
 </html>"""
 
@@ -3241,6 +3276,36 @@ async function createAccount() {
     document.body.style.visibility = '';
   }
 })();
+</script>
+
+<script>
+function toggleKPIs() {
+  const grid = document.getElementById('kpi-grid');
+  const btn = document.getElementById('kpi-toggle-btn');
+  // If we're on mobile, grid uses grid-template-columns: repeat(2, 1fr) !important, 
+  // so we should just toggle a hidden class or use display: none
+  if (grid.style.display === 'none') {
+    grid.style.display = ''; // revert to stylesheet display
+    btn.innerHTML = '&#128065; Hide Summary';
+    localStorage.setItem('hideKPIs', 'false');
+  } else {
+    grid.style.display = 'none';
+    btn.innerHTML = '&#128064; Show Summary';
+    localStorage.setItem('hideKPIs', 'true');
+  }
+}
+
+// Apply on load
+document.addEventListener("DOMContentLoaded", () => {
+  if (localStorage.getItem('hideKPIs') === 'true') {
+    const grid = document.getElementById('kpi-grid');
+    const btn = document.getElementById('kpi-toggle-btn');
+    if (grid && btn) {
+      grid.style.display = 'none';
+      btn.innerHTML = '&#128064; Show Summary';
+    }
+  }
+});
 </script>
 </body>
 </html>"""
