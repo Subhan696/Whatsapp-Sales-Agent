@@ -353,7 +353,7 @@ async def whatsapp_qr(tenant_id: int = Depends(get_authenticated_tenant_id)) -> 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(f"{settings.WA_BRIDGE_URL}/qr/{tenant_id}", headers=headers)
             if resp.status_code == 404:
-                raise HTTPException(status_code=404, detail=resp.json().get("error", "no QR available"))
+                return Response(status_code=204)  # no QR yet — silent for the browser
             resp.raise_for_status()
             return Response(content=resp.content, media_type="image/png")
     except httpx.HTTPError as exc:
@@ -2177,7 +2177,7 @@ async function refreshWaStatus() {
 async function loadWaQr() {
   try {
     const r = await adminFetch('/admin/whatsapp/qr');
-    if (!r.ok) return; // no QR yet (e.g. session still starting) — next poll tick retries
+    if (r.status === 204 || !r.ok) return; // no QR yet — next poll tick retries
     const blob = await r.blob();
     document.getElementById('wa-qr-img').src = URL.createObjectURL(blob);
     document.getElementById('wa-qr-wrap').style.display = '';
