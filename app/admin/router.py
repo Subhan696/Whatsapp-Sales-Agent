@@ -3216,7 +3216,7 @@ function insertTag(tag) {
 
 function updateRecipientCount() {
   const raw = (document.getElementById('ob-recipients') || {}).value || '';
-  const lines = raw.split(/[\n,;]+/);
+  const lines = raw.split(/[\\r\\n,;]+/);
   let count = 0;
   const seen = new Set();
   for (const line of lines) {
@@ -3224,7 +3224,7 @@ function updateRecipientCount() {
     if (!trimmed) continue;
     const parts = trimmed.split(/[,:]+/);
     const candidate = parts[0].trim();
-    const digits = candidate.replace(/\D/g, '');
+    const digits = candidate.replace(/\\D/g, '');
     if (digits.length >= 7 && !seen.has(digits)) {
       seen.add(digits);
       count++;
