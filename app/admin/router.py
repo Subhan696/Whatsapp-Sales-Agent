@@ -280,7 +280,10 @@ async def put_admin_setting(
 
 
 @router.post("/admin/whatsapp/connect")
-async def connect_whatsapp(tenant_id: int = Depends(get_authenticated_tenant_id)) -> dict:
+async def connect_whatsapp(
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+    force: bool = False,
+) -> dict:
     """Start (or resume) this tenant's WhatsApp session on the bridge.
 
     Safe to call repeatedly — the bridge no-ops if a session already exists,
@@ -291,9 +294,14 @@ async def connect_whatsapp(tenant_id: int = Depends(get_authenticated_tenant_id)
 
     settings = get_settings()
     headers = {"X-Bridge-Token": settings.WA_BRIDGE_TOKEN} if settings.WA_BRIDGE_TOKEN else {}
+    params = {"force": "true"} if force else {}
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{settings.WA_BRIDGE_URL}/connect/{tenant_id}", headers=headers)
+            resp = await client.post(
+                f"{settings.WA_BRIDGE_URL}/connect/{tenant_id}",
+                headers=headers,
+                params=params,
+            )
             resp.raise_for_status()
             return resp.json()
     except httpx.HTTPError as exc:
@@ -2036,7 +2044,7 @@ function showTab(name, btn) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (name === 'settings') { loadSettings(); refreshWaStatus(); }
-  else if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+  else { stopWaPolling(); }
   if (name === 'bookings') loadBookings();
   if (name === 'outbound') loadCampaigns();
   if (name === 'refunds') loadRefunds();
@@ -2561,9 +2569,11 @@ function applyCustomerFilter() {
 
 // ---- WhatsApp connection ----
 let waPollTimer = null;
+let currentQrBlobUrl = null;
 
-function setWaBadge(status) {
+function setWaBadge(status, errorDetail) {
   const badge = document.getElementById('wa-status-badge');
+  if (!badge) return;
   const map = {
     ready: ['Connected', '#16a34a', '#dcfce7'],
     qr_pending: ['Scan QR to connect', '#b45309', '#fef3c7'],
@@ -2571,33 +2581,85 @@ function setWaBadge(status) {
     logged_out: ['Disconnected — reconnect', '#dc2626', '#fee2e2'],
     not_connected: ['Not connected', '#374151', '#e5e7eb'],
     starting: ['Starting…', '#374151', '#e5e7eb'],
-    error: ['Status unavailable', '#dc2626', '#fee2e2'],
+    error: [errorDetail ? 'Status unavailable: ' + errorDetail : 'Status unavailable', '#dc2626', '#fee2e2'],
   };
-  const [text, color, bg] = map[status] || [status, '#374151', '#e5e7eb'];
+  const [text, color, bg] = map[status] || [status || 'Unknown', '#374151', '#e5e7eb'];
   badge.textContent = text;
   badge.style.color = color;
   badge.style.background = bg;
-  // Connect vs Disconnect visibility: once there's a live/pairing session,
-  // offer Disconnect; when fully off, offer Connect.
+
   const connectBtn = document.getElementById('wa-connect-btn');
   const disconnectBtn = document.getElementById('wa-disconnect-btn');
-  const connected = ['ready', 'qr_pending', 'disconnected', 'starting'].includes(status);
-  connectBtn.style.display = connected ? 'none' : '';
-  disconnectBtn.style.display = connected ? '' : 'none';
+  const qrWrap = document.getElementById('wa-qr-wrap');
+  if (!connectBtn || !disconnectBtn) return;
+
   if (status === 'ready') {
-    document.getElementById('wa-qr-wrap').style.display = 'none';
-    if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+    connectBtn.style.display = 'none';
+    disconnectBtn.style.display = '';
+    if (qrWrap) qrWrap.style.display = 'none';
+    stopWaPolling();
+  } else if (status === 'qr_pending') {
+    connectBtn.style.display = '';
+    connectBtn.innerHTML = '&#8635; Refresh QR Code';
+    disconnectBtn.style.display = '';
+  } else {
+    connectBtn.style.display = '';
+    connectBtn.innerHTML = '&#128241; Connect WhatsApp';
+    disconnectBtn.style.display = (status === 'disconnected' || status === 'starting') ? '' : 'none';
+    if (qrWrap) qrWrap.style.display = 'none';
+  }
+}
+
+function startWaPolling() {
+  if (waPollTimer) return;
+  waPollTimer = setInterval(async () => {
+    try {
+      const r = await adminFetch('/admin/whatsapp/status');
+      if (!r.ok) return;
+      const data = await r.json();
+      const st = data.status || 'not_connected';
+      setWaBadge(st);
+      if (st === 'qr_pending') {
+        loadWaQr();
+      } else if (st === 'ready') {
+        stopWaPolling();
+        const qrWrap = document.getElementById('wa-qr-wrap');
+        if (qrWrap) qrWrap.style.display = 'none';
+      }
+    } catch (_) {}
+  }, 3000);
+}
+
+function stopWaPolling() {
+  if (waPollTimer) {
+    clearInterval(waPollTimer);
+    waPollTimer = null;
   }
 }
 
 async function refreshWaStatus() {
   try {
     const r = await adminFetch('/admin/whatsapp/status');
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      const msg = err.detail || ('HTTP ' + r.status);
+      setWaBadge('error', msg);
+      return 'error';
+    }
     const data = await r.json();
-    setWaBadge(data.status);
-    return data.status;
+    const st = data.status || 'not_connected';
+    setWaBadge(st);
+    if (st === 'qr_pending') {
+      loadWaQr();
+      startWaPolling();
+    } else if (st === 'ready') {
+      stopWaPolling();
+      const qrWrap = document.getElementById('wa-qr-wrap');
+      if (qrWrap) qrWrap.style.display = 'none';
+    }
+    return st;
   } catch (e) {
-    setWaBadge('error');
+    setWaBadge('error', e.message);
     return 'error';
   }
 }
@@ -2607,32 +2669,58 @@ async function loadWaQr() {
     const r = await adminFetch('/admin/whatsapp/qr');
     if (r.status === 204 || !r.ok) return; // no QR yet — next poll tick retries
     const blob = await r.blob();
-    document.getElementById('wa-qr-img').src = URL.createObjectURL(blob);
-    document.getElementById('wa-qr-wrap').style.display = '';
+    if (currentQrBlobUrl) URL.revokeObjectURL(currentQrBlobUrl);
+    currentQrBlobUrl = URL.createObjectURL(blob);
+    const img = document.getElementById('wa-qr-img');
+    const wrap = document.getElementById('wa-qr-wrap');
+    if (img) img.src = currentQrBlobUrl;
+    if (wrap) wrap.style.display = '';
   } catch (e) { /* transient — next poll tick retries */ }
 }
 
-async function connectWhatsapp() {
+async function connectWhatsapp(force = false) {
   const btn = document.getElementById('wa-connect-btn');
-  btn.disabled = true;
-  try {
-    await adminFetch('/admin/whatsapp/connect', { method: 'POST' });
-  } catch (e) {
-    setWaBadge('error');
-  }
-  btn.disabled = false;
+  const badge = document.getElementById('wa-status-badge');
+  const isQrPending = badge && badge.textContent && badge.textContent.includes('Scan QR');
+  const shouldForce = force || isQrPending;
 
-  if (waPollTimer) clearInterval(waPollTimer);
-  waPollTimer = setInterval(async () => {
-    const status = await refreshWaStatus();
-    if (status === 'qr_pending') loadWaQr();
-  }, 3000);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = shouldForce ? 'Refreshing…' : 'Connecting…';
+  }
+  try {
+    const url = shouldForce ? '/admin/whatsapp/connect?force=true' : '/admin/whatsapp/connect';
+    const r = await adminFetch(url, { method: 'POST' });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      const msg = err.detail || ('HTTP ' + r.status);
+      alert('Could not connect to WhatsApp bridge:\n' + msg +
+            '\n\nIf running in Docker, ensure the bridge service is up:\ndocker compose up -d --build bridge');
+      setWaBadge('error', msg);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = shouldForce ? '&#8635; Refresh QR Code' : '&#128241; Connect WhatsApp';
+      }
+      return;
+    }
+  } catch (e) {
+    alert('Request failed: ' + e.message);
+    setWaBadge('error', e.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = shouldForce ? '&#8635; Refresh QR Code' : '&#128241; Connect WhatsApp';
+    }
+    return;
+  }
+  if (btn) btn.disabled = false;
+
+  startWaPolling();
   const status = await refreshWaStatus();
   if (status === 'qr_pending') loadWaQr();
 }
 
 async function disconnectWhatsapp() {
-  if (!confirm('Disconnect WhatsApp and stop the agent?\\n\\nThe agent will stop receiving and replying to messages. Reconnecting later requires scanning a new QR code.')) return;
+  if (!confirm('Disconnect WhatsApp and stop the agent?\n\nThe agent will stop receiving and replying to messages. Reconnecting later requires scanning a new QR code.')) return;
   const btn = document.getElementById('wa-disconnect-btn');
   btn.disabled = true; btn.textContent = 'Disconnecting…';
   try {
@@ -2640,8 +2728,9 @@ async function disconnectWhatsapp() {
     if (!r.ok) { const d = await r.json().catch(()=>({})); alert('Error: ' + (d.detail || r.status)); }
   } catch (e) { alert('Request failed: ' + e.message); }
   btn.disabled = false; btn.textContent = 'Disconnect / Stop Agent';
-  if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
-  document.getElementById('wa-qr-wrap').style.display = 'none';
+  stopWaPolling();
+  const qrWrap = document.getElementById('wa-qr-wrap');
+  if (qrWrap) qrWrap.style.display = 'none';
   await refreshWaStatus();
 }
 
@@ -4088,9 +4177,9 @@ function renderTenants(tenants) {
       ? '<span class="badge b-green">Active</span>'
       : '<span class="badge b-gray">' + t.status + '</span>';
     const toggleBtn = t.id === 1 ? '' : isActive
-      ? '<button class="btn btn-yellow" onclick="setStatus(' + t.id + ',\\'inactive\\')">Suspend</button>'
-      : '<button class="btn btn-green" onclick="setStatus(' + t.id + ',\\'active\\')">Activate</button>';
-    const viewBtn   = '<button class="btn btn-indigo" onclick="viewDashboard(' + t.id + ',\\'' + encodeURIComponent(t.name) + '\\')">View Dashboard</button>';
+      ? '<button class="btn btn-yellow" onclick="setStatus(' + t.id + ', &quot;inactive&quot;)">Suspend</button>'
+      : '<button class="btn btn-green" onclick="setStatus(' + t.id + ', &quot;active&quot;)">Activate</button>';
+    const viewBtn   = '<button class="btn btn-indigo" onclick="viewDashboard(' + t.id + ', &quot;' + encodeURIComponent(t.name) + '&quot;)">View Dashboard</button>';
     const rotateBtn = '<button class="btn btn-amber" onclick="rotateKey(' + t.id + ')">Rotate Key</button>';
     const deleteBtn = t.id === 1 ? '' : '<button class="btn btn-red" onclick="deleteTenant(' + t.id + ')">Delete</button>';
     return '<tr>'

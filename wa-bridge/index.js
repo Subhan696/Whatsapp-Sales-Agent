@@ -286,14 +286,23 @@ async function createSession(tenantId) {
 // near-simultaneous callers could both see "no session yet" otherwise.
 const sessionCreationInFlight = new Set();
 
-async function ensureSession(tenantId) {
-  if (sessions.has(tenantId) || sessionCreationInFlight.has(tenantId)) return;
+async function ensureSession(tenantId, force = false) {
+  const existing = sessions.get(tenantId);
+  if (!force && existing && existing.status === 'ready') return;
+  if (!force && existing && existing.status === 'qr_pending' && existing.sock) return;
+  if (sessionCreationInFlight.has(tenantId)) return;
   // Clear any lingering intentional-disconnect flag — an explicit connect
   // overrides a prior disconnect for this tenant.
   disconnecting.delete(tenantId);
   sessionCreationInFlight.add(tenantId);
   try {
-    await createSession(tenantId);
+    if (existing && existing.sock && (force || existing.status === 'logged_out' || existing.status === 'disconnected')) {
+      try { existing.sock.end(); } catch (_) {}
+      sessions.delete(tenantId);
+    }
+    if (!sessions.has(tenantId)) {
+      await createSession(tenantId);
+    }
   } finally {
     sessionCreationInFlight.delete(tenantId);
   }
@@ -365,7 +374,8 @@ app.get('/health', (_req, res) => {
 // possible without editing WA_WEB_TENANT_IDS or restarting the process.
 app.post('/connect/:tenantId', async (req, res) => {
   try {
-    await ensureSession(req.params.tenantId);
+    const force = req.query.force === 'true' || req.body?.force === true;
+    await ensureSession(req.params.tenantId, force);
     const session = sessions.get(req.params.tenantId);
     res.json({ status: session ? session.status : 'starting' });
   } catch (e) {
