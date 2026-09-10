@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     AppSetting,
+    Booking,
     CRMStage,
     Customer,
     Event,
@@ -21,6 +22,7 @@ from app.db.models import (
     MessageLog,
     Order,
     OrderStatus,
+    OutboundCampaign,
     PendingPaymentVerification,
     ProcessedMessage,
     Product,
@@ -877,4 +879,204 @@ async def get_tenant_by_email(db: AsyncSession, email: str) -> Tenant | None:
         )
     )
     return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Bookings
+# ---------------------------------------------------------------------------
+
+
+async def _get_next_booking_seq(db: AsyncSession, *, tenant_id: int) -> int:
+    result = await db.execute(
+        select(func.count()).select_from(Booking).where(Booking.tenant_id == tenant_id)
+    )
+    count = result.scalar_one() or 0
+    return count + 1
+
+
+async def generate_booking_ref(db: AsyncSession, *, tenant_id: int) -> str:
+    year = _now().year
+    seq = await _get_next_booking_seq(db, tenant_id=tenant_id)
+    return f"BKG-{year}-{seq:04d}"
+
+
+async def create_booking(
+    db: AsyncSession,
+    *,
+    tenant_id: int,
+    customer_id: int | None = None,
+    title: str,
+    start_time: str,
+    meeting_type: str = "whatsapp_call",
+    notes: str | None = None,
+    customer_name: str | None = None,
+    customer_phone: str | None = None,
+    status: str = "confirmed",
+) -> Booking:
+    booking_ref = await generate_booking_ref(db, tenant_id=tenant_id)
+    booking = Booking(
+        tenant_id=tenant_id,
+        customer_id=customer_id,
+        booking_ref=booking_ref,
+        title=title,
+        start_time=start_time,
+        meeting_type=meeting_type,
+        status=status,
+        notes=notes,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
+    )
+    db.add(booking)
+    await db.flush()
+    await db.refresh(booking)
+    return booking
+
+
+async def get_booking_by_ref(
+    db: AsyncSession, booking_ref: str, *, tenant_id: int
+) -> Booking | None:
+    result = await db.execute(
+        select(Booking).where(
+            Booking.booking_ref == booking_ref, Booking.tenant_id == tenant_id
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_booking_by_id(
+    db: AsyncSession, booking_id: int, *, tenant_id: int
+) -> Booking | None:
+    result = await db.execute(
+        select(Booking).where(
+            Booking.id == booking_id, Booking.tenant_id == tenant_id
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_bookings(
+    db: AsyncSession,
+    *,
+    tenant_id: int,
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[Booking]:
+    query = select(Booking).where(Booking.tenant_id == tenant_id)
+    if status:
+        query = query.where(Booking.status == status)
+    query = query.order_by(Booking.created_at.desc()).offset(offset).limit(limit)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def list_customer_bookings(
+    db: AsyncSession,
+    customer_id: int,
+    *,
+    tenant_id: int,
+    limit: int = 10,
+) -> list[Booking]:
+    query = (
+        select(Booking)
+        .where(Booking.tenant_id == tenant_id, Booking.customer_id == customer_id)
+        .order_by(Booking.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def update_booking_status(
+    db: AsyncSession,
+    booking_or_id: Booking | int | None = None,
+    status: str = "confirmed",
+    *,
+    booking_id: int | None = None,
+    booking: Booking | None = None,
+    tenant_id: int | None = None,
+) -> Booking:
+    b_id = booking_id or (booking_or_id if isinstance(booking_or_id, int) else None)
+    b_obj = booking or (booking_or_id if isinstance(booking_or_id, Booking) else None)
+
+    if b_id is not None:
+        target = await get_booking_by_id(db, b_id, tenant_id=tenant_id)
+        if not target:
+            raise ValueError(f"Booking #{b_id} not found")
+    elif b_obj is not None:
+        target = b_obj
+    else:
+        raise ValueError("Must provide either booking or booking_id")
+    target.status = status
+    await db.flush()
+    await db.refresh(target)
+    return target
+
+
+# ---------------------------------------------------------------------------
+# Outbound Campaigns
+# ---------------------------------------------------------------------------
+
+
+async def create_outbound_campaign(
+    db: AsyncSession,
+    *,
+    tenant_id: int,
+    name: str,
+    mode: str,
+    template_or_prompt: str,
+    total_recipients: int = 0,
+    sent_count: int = 0,
+    failed_count: int = 0,
+    status: str = "completed",
+) -> OutboundCampaign:
+    campaign = OutboundCampaign(
+        tenant_id=tenant_id,
+        name=name,
+        mode=mode,
+        template_or_prompt=template_or_prompt,
+        total_recipients=total_recipients,
+        sent_count=sent_count,
+        failed_count=failed_count,
+        status=status,
+    )
+    db.add(campaign)
+    await db.flush()
+    await db.refresh(campaign)
+    return campaign
+
+
+async def list_outbound_campaigns(
+    db: AsyncSession,
+    *,
+    tenant_id: int,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[OutboundCampaign]:
+    query = (
+        select(OutboundCampaign)
+        .where(OutboundCampaign.tenant_id == tenant_id)
+        .order_by(OutboundCampaign.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def get_outbound_campaign_by_id(
+    db: AsyncSession,
+    campaign_id: int,
+    *,
+    tenant_id: int,
+) -> OutboundCampaign | None:
+    result = await db.execute(
+        select(OutboundCampaign).where(
+            OutboundCampaign.id == campaign_id,
+            OutboundCampaign.tenant_id == tenant_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 

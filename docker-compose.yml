@@ -65,8 +65,12 @@ services:
       - ./wa-bridge/.env
     environment:
       - PYTHON_INBOUND_URL=http://app:8000/wa-bridge/inbound
+      - WA_BRIDGE_DATABASE_URL=postgresql://wauser:wapass@postgres:5432/wa_agent
     depends_on:
-      - app
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
     restart: unless-stopped
 
   pgadmin:

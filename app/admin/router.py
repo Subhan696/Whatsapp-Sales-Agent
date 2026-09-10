@@ -1010,6 +1010,17 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     #tab-inventory td:nth-of-type(8)::before { content: "Media URL"; }
     #tab-inventory td:nth-of-type(9)::before { content: "Actions"; }
     
+    /* Bookings Table Labels */
+    #tab-bookings td:nth-of-type(1)::before { content: "Ref"; }
+    #tab-bookings td:nth-of-type(2)::before { content: "Title"; }
+    #tab-bookings td:nth-of-type(3)::before { content: "Date & Time"; }
+    #tab-bookings td:nth-of-type(4)::before { content: "Format"; }
+    #tab-bookings td:nth-of-type(5)::before { content: "Customer"; }
+    #tab-bookings td:nth-of-type(6)::before { content: "Phone"; }
+    #tab-bookings td:nth-of-type(7)::before { content: "Status"; }
+    #tab-bookings td:nth-of-type(8)::before { content: "Notes"; }
+    #tab-bookings td:nth-of-type(9)::before { content: "Actions"; }
+    
     /* Touch Targets & Base Styles */
     .filter-bar { padding: 16px; background: #fff; }
     .filter-bar select {
@@ -1026,6 +1037,17 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     .analytics-grid { padding: 16px; grid-template-columns: 1fr; }
     .analytics-card { grid-column: 1 / -1 !important; margin-bottom: 16px; }
   }
+
+  /* ---- Switch / Toggle Component ---- */
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1; transition: .25s ease; border-radius: 24px; }
+  .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+                   background-color: white; transition: .25s ease; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+  input:checked + .slider { background-color: #10b981; }
+  input:checked + .slider:before { transform: translateX(20px); }
+  input:focus + .slider { box-shadow: 0 0 0 2px rgba(16,185,129,.2); }
 </style>
 </head>
 <body style="visibility:hidden">
@@ -1095,6 +1117,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     <h1><div class="wa-dot">&#128241;</div> Business <span>CRM</span></h1>
   </div>
   <div class="refresh-row">
+    <span id="topbar-lang-pill" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer" onclick="showTab('settings', document.querySelector('.tab[onclick*=\'settings\']'))" title="Click to manage language settings">&#127760; Urdu: ON</span>
     <span id="last-updated">Loading…</span>
     <span class="topbar-user" id="topbar-user"></span>
     <button onclick="loadAll()">&#8635; Refresh</button>
@@ -1168,6 +1191,8 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <button class="tab" onclick="showTab('inventory',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128230; Inventory</button>
   <button class="tab" onclick="showTab('analytics',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128202; Analytics</button>
   <button class="tab" onclick="showTab('funnel',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128200; Funnel</button>
+  <button class="tab" id="tab-btn-bookings" onclick="showTab('bookings',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128197; Bookings <span id="booking-badge" style="display:none;background:#2563eb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
+  <button class="tab" id="tab-btn-outbound" onclick="showTab('outbound',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128227; Outbound</button>
   <button class="tab" onclick="showTab('settings',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#9881; Settings</button>
   <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
   <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
@@ -1370,6 +1395,134 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       </details>
     </div>
 
+    <div style="border:1px solid #d1d5db;border-radius:10px;padding:20px;background:#f9fafb">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <label style="font-size:14px;font-weight:700;color:#111827;display:flex;align-items:center;gap:6px">
+            <span>&#127760;</span> Urdu Language Texting (اردو زبان)
+          </label>
+          <p style="font-size:12px;color:#6b7280;margin-top:2px">
+            Enable the sales agent to text in Urdu with your WhatsApp customers.
+          </p>
+        </div>
+        <label class="switch">
+          <input id="setting-urdu-toggle" type="checkbox" onchange="toggleUrduSupport(this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="urdu-options-box" style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;flex-direction:column;gap:10px">
+        <label style="font-size:12px;font-weight:600;color:#374151">Response Style / Language Mode</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <select id="setting-agent-language" onchange="saveLanguageMode(this.value)"
+                  style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff">
+            <option value="auto">Auto-detect (Urdu Script, Roman Urdu & English)</option>
+            <option value="roman_urdu">Roman Urdu (e.g. "Aap ka order confirm hai")</option>
+            <option value="urdu_script">Urdu Script (اردو رسم الخط - e.g. "آپ کا آرڈر کنفرم ہے")</option>
+          </select>
+          <button onclick="saveLanguageMode(document.getElementById('setting-agent-language').value)"
+                  style="background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Save</button>
+        </div>
+        <div style="font-size:11px;color:#6b7280;line-height:1.5" id="urdu-mode-description">
+          <b>Auto-detect:</b> If customer writes in Urdu script, agent replies in Urdu script. If customer writes in Roman Urdu, agent replies in Roman Urdu. If English, agent replies in English.
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">
+        <span id="urdu-setting-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+        <span id="urdu-badge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#166534">Urdu Active</span>
+      </div>
+    </div>
+
+    <div style="border:1px solid #d1d5db;border-radius:10px;padding:20px;background:#f9fafb">
+      <label style="font-size:14px;font-weight:700;color:#111827;display:flex;align-items:center;gap:6px">
+        <span>&#129302;</span> Agent Persona &amp; Receptionist Mode
+      </label>
+      <p style="font-size:12px;color:#6b7280;margin-top:2px;margin-bottom:12px">
+        Configure how your WhatsApp AI acts. It can operate as a consultation booking closer, receptionist answering business queries, or product salesperson.
+      </p>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Agent Operating Mode</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <select id="setting-agent-mode"
+                    style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff">
+              <option value="booking_closer">Booking Closer &amp; Receptionist (Consults, answers queries, &amp; books appointments/calls)</option>
+              <option value="receptionist">Front Desk Receptionist (Welcoming greeting, FAQ answering &amp; scheduling appointments)</option>
+              <option value="hybrid">Sales Assistant &amp; Booking Closer (Full commerce + bookings)</option>
+              <option value="sales">Sales Assistant Only (E-commerce / catalog orders only)</option>
+            </select>
+            <button onclick="saveSetting('agent_mode','setting-agent-mode','agent-mode-status')"
+                    style="background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Save</button>
+          </div>
+          <span id="agent-mode-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Full Business Knowledge &amp; Context (Owner Explanation)</label>
+          <p style="font-size:11px;color:#6b7280;margin-bottom:6px">Explain your entire business here! The agent uses this exact context to answer customer questions accurately. Include your background, mission, policies, common FAQs, and how you work.</p>
+          <textarea id="setting-business-knowledge" rows="5"
+                    placeholder="e.g. We are a premier agency specializing in web development, AI automation, and consulting. We have completed 200+ projects worldwide. We offer free 15-minute consultations to assess client requirements. Turnaround is 2-4 weeks. Deposit is 50% upfront..."
+                    style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+            <button onclick="saveSetting('business_knowledge','setting-business-knowledge','business-knowledge-status')"
+                    style="background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Save Knowledge</button>
+            <span id="business-knowledge-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Services &amp; Pricing Details</label>
+          <p style="font-size:11px;color:#6b7280;margin-bottom:6px">List the services, packages, consulting tiers, or fees you offer so the agent can quote them accurately.</p>
+          <textarea id="setting-services-offered" rows="4"
+                    placeholder="e.g. 1. Discovery Consultation: Free (15 mins)&#10;2. Architecture Audit: PKR 15,000&#10;3. Full System Build: Starting from PKR 75,000"
+                    style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+            <button onclick="saveSetting('services_offered','setting-services-offered','services-offered-status')"
+                    style="background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Save Services</button>
+            <span id="services-offered-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Working Hours &amp; Availability</label>
+            <input id="setting-working-hours" type="text" placeholder="e.g. Mon-Fri 9:00 AM – 6:00 PM PKT"
+                   style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+              <button onclick="saveSetting('working_hours','setting-working-hours','working-hours-status')"
+                      style="background:#6366f1;color:#fff;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">Save Hours</button>
+              <span id="working-hours-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Meeting Formats / Types</label>
+            <input id="setting-meeting-types" type="text" placeholder="e.g. Zoom, Google Meet, Phone Call, In-person"
+                   style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+            <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+              <button onclick="saveSetting('meeting_types','setting-meeting-types','meeting-types-status')"
+                      style="background:#6366f1;color:#fff;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">Save Formats</button>
+              <span id="meeting-types-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Special Instructions for Agent</label>
+          <p style="font-size:11px;color:#6b7280;margin-bottom:6px">Any specific instructions or rules for how the agent should handle customer inquiries or qualify leads.</p>
+          <textarea id="setting-custom-instructions" rows="3"
+                    placeholder="e.g. Always ask for their project timeline before confirming the meeting. If they ask for discounts, politely explain our rates are fixed but include premium 24/7 support."
+                    style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+            <button onclick="saveSetting('custom_instructions','setting-custom-instructions','custom-instructions-status')"
+                    style="background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Save Instructions</button>
+            <span id="custom-instructions-status" style="font-size:12px;color:#16a34a;font-weight:600"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div>
       <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Business Name</label>
       <p style="font-size:12px;color:#6b7280;margin-bottom:10px">Your shop or company name. The agent introduces itself with this.</p>
@@ -1492,6 +1645,279 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<!-- BOOKINGS TAB -->
+<div class="panel" id="tab-bookings" style="display:none">
+  <div class="panel-header">
+    <h2>Client Bookings &amp; Appointments</h2>
+    <span class="count" id="bookings-count">0</span>
+  </div>
+  <div class="filter-bar">
+    <select id="bookings-status-filter" onchange="applyBookingFilter()">
+      <option value="">All statuses</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="completed">Completed</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Title</th>
+          <th>Date &amp; Time</th>
+          <th>Format</th>
+          <th>Customer</th>
+          <th>Phone</th>
+          <th>Status</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="bookings-body"><tr><td colspan="9" class="empty"><div class="spinner"></div></td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- OUTBOUND MESSAGING TAB -->
+<div class="panel" id="tab-outbound" style="display:none">
+  <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2>&#128227; Outbound Messaging &amp; AI Broadcasts</h2>
+      <p style="font-size:12px;color:#6b7280;margin-top:3px">
+        Broadcast proactive messages to clients or leads via custom templates or AI prompt generation. When recipients reply, the AI Agent remembers this context and continues the conversation!
+      </p>
+    </div>
+    <span class="count" id="outbound-campaigns-count">0 Campaigns</span>
+  </div>
+
+  <div style="padding:20px;display:grid;grid-template-columns:1.15fr 0.85fr;gap:24px" id="outbound-composer-grid">
+    <!-- Left: Composer -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+      
+      <!-- Campaign Name -->
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Campaign Name (Optional)</label>
+        <input id="ob-campaign-name" type="text" placeholder="e.g. Ramadan Consultation Drive / Client Follow-up"
+               style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+      </div>
+
+      <!-- Recipients input -->
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="font-size:13px;font-weight:700;color:#374151">
+            Recipient Numbers &amp; Names *
+          </label>
+          <span id="ob-recipient-count-badge" style="font-size:11px;font-weight:600;background:#eff6ff;color:#2563eb;padding:2px 8px;border-radius:10px">
+            0 recipients detected
+          </span>
+        </div>
+        <textarea id="ob-recipients" rows="5" oninput="updateRecipientCount()" placeholder="Enter numbers (one per line or comma-separated), with optional names:&#10;03001234567, Ali Khan&#10;+923019876543, Sara&#10;03217654321&#10;+14155552671, John"
+                  style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;font-family:monospace;resize:vertical"></textarea>
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">
+          &#10003; Supports Pakistani mobile (<code>0300...</code> &rarr; <code>92300...</code>), international E.164 (<code>+92...</code>), and CSV (<code>number, name</code>).
+        </div>
+      </div>
+
+      <!-- Mode Selector -->
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Message Composition Mode</label>
+        <div style="display:flex;gap:10px">
+          <button type="button" id="ob-mode-ai-btn" onclick="setOutboundMode('ai_prompt')"
+                  style="flex:1;padding:10px;border:2px solid #6366f1;background:#eef2ff;color:#4338ca;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+            <span>&#10024;</span> AI Prompt Generator
+          </button>
+          <button type="button" id="ob-mode-tpl-btn" onclick="setOutboundMode('template')"
+                  style="flex:1;padding:10px;border:1px solid #d1d5db;background:#fff;color:#4b5563;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+            <span>&#128221;</span> Direct Template Text
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Prompt Section -->
+      <div id="ob-section-ai" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="font-size:13px;font-weight:700;color:#374151">
+            AI Prompt / Outbound Directive *
+          </label>
+          <span style="font-size:11px;color:#6b7280">Grounded in your business context</span>
+        </div>
+        <textarea id="ob-ai-prompt" rows="4" placeholder="Tell the AI what outbound message to craft, e.g.:&#10;Invite the customer to book a free 15-minute consultation about our new services this week. Keep it warm, polite, and concise."
+                  style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        
+        <!-- Preset Prompts -->
+        <div style="margin-top:8px">
+          <span style="font-size:11px;font-weight:600;color:#6b7280;margin-right:6px">Quick Presets:</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+            <button type="button" onclick="setPresetPrompt('consultation')"
+                    style="background:#f3f4f6;border:1px solid #d1d5db;padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;color:#374151">
+              &#128197; Consultation Invite
+            </button>
+            <button type="button" onclick="setPresetPrompt('offer')"
+                    style="background:#f3f4f6;border:1px solid #d1d5db;padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;color:#374151">
+              &#127775; New Service/Offer
+            </button>
+            <button type="button" onclick="setPresetPrompt('followup')"
+                    style="background:#f3f4f6;border:1px solid #d1d5db;padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;color:#374151">
+              &#128075; Friendly Follow-Up
+            </button>
+            <button type="button" onclick="setPresetPrompt('urdu')"
+                    style="background:#f3f4f6;border:1px solid #d1d5db;padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;color:#374151">
+              &#127477;&#127472; Roman Urdu Check-In
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Template Section -->
+      <div id="ob-section-tpl" style="display:none;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="font-size:13px;font-weight:700;color:#374151">
+            Template Text *
+          </label>
+          <span style="font-size:11px;color:#6b7280">Supports variables</span>
+        </div>
+        <textarea id="ob-template-text" rows="4" placeholder="Salam {name}! Thank you for your interest in {business_name}. We have an exclusive slot open for your consultation this week. Would tomorrow at 4 PM work for you?"
+                  style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <span style="font-size:11px;font-weight:600;color:#6b7280">Insert variable:</span>
+          <button type="button" onclick="insertTag('{name}')"
+                  style="background:#e0e7ff;color:#3730a3;border:none;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer">+ {name}</button>
+          <button type="button" onclick="insertTag('{business_name}')"
+                  style="background:#e0e7ff;color:#3730a3;border:none;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer">+ {business_name}</button>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button type="button" id="ob-preview-btn" onclick="previewOutbound()"
+                style="flex:1;background:#f3f4f6;border:1px solid #d1d5db;color:#374151;padding:10px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+          <span>&#128065;</span> Generate Live Preview
+        </button>
+        <button type="button" id="ob-send-btn" onclick="sendOutboundBroadcast()"
+                style="flex:1.3;background:linear-gradient(90deg,#075E54,#128C7E);color:#fff;border:none;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 2px 6px rgba(18,140,126,0.3)">
+          <span>&#128227;</span> <span id="ob-send-btn-text">Send Broadcast Now</span>
+        </button>
+      </div>
+
+      <div id="ob-form-error" style="display:none;color:#dc2626;font-size:12px;font-weight:600;margin-top:10px"></div>
+    </div>
+
+    <!-- Right: WhatsApp Preview & Context Callout -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      
+      <!-- WhatsApp Mock Bubble Box -->
+      <div style="background:#e5ddd5;border:1px solid #c8c0b8;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+        <!-- WhatsApp Header -->
+        <div style="background:#075E54;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff">
+            &#128172;
+          </div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;line-height:1.2" id="ob-preview-sender-name">Your Business</div>
+            <div style="font-size:11px;color:#a7f3d0">WhatsApp Business Verified</div>
+          </div>
+          <span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:10px">Live Preview</span>
+        </div>
+
+        <!-- Chat area -->
+        <div style="padding:16px;min-height:160px;display:flex;flex-direction:column;justify-content:flex-end">
+          <div style="align-self:center;background:rgba(255,255,255,0.85);border-radius:6px;padding:3px 10px;font-size:11px;color:#555;margin-bottom:12px;box-shadow:0 1px 1px rgba(0,0,0,0.06)">
+            Today &bull; Outbound Message to <span id="ob-preview-recipient-label">Ali Khan (+923001234567)</span>
+          </div>
+
+          <!-- Outbound Message Bubble -->
+          <div style="align-self:flex-end;max-width:85%;background:#dcf8c6;border-radius:8px 0px 8px 8px;padding:9px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.12);position:relative">
+            <div id="ob-preview-bubble-text" style="font-size:13px;color:#111827;line-height:1.45;white-space:pre-wrap">Salam Ali Khan! Thank you for your interest in our consultation services. We have slots available this week. Would you like to book a quick 15-minute call?</div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:4px">
+              <span style="font-size:10px;color:#6b7280" id="ob-preview-time">12:00 PM</span>
+              <span style="font-size:11px;color:#3b82f6;font-weight:bold">&#10003;&#10003;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Context Continuity Guarantee Card -->
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px 16px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:20px;line-height:1">&#129302;</span>
+          <div>
+            <h4 style="font-size:13px;font-weight:700;color:#166534;margin-bottom:3px">Full Conversation Context Memory</h4>
+            <p style="font-size:12px;color:#15803d;line-height:1.4">
+              When any client replies to your outbound message on WhatsApp, our AI Agent automatically reads this outbound message in the conversation history and responds intelligently based on what was offered!
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Live Execution Results Banner & Table -->
+  <div id="ob-results-section" style="display:none;padding:0 20px 20px 20px">
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+      <div style="padding:14px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+        <h3 style="font-size:14px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:8px">
+          <span>&#128202;</span> Broadcast Execution Results
+        </h3>
+        <div style="display:flex;gap:12px;font-size:13px">
+          <span style="color:#4b5563">Total: <strong id="ob-res-total">0</strong></span>
+          <span style="color:#16a34a">Sent: <strong id="ob-res-sent">0</strong></span>
+          <span style="color:#dc2626">Failed: <strong id="ob-res-failed">0</strong></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Phone Number</th>
+              <th>Customer Name</th>
+              <th>Status</th>
+              <th>Message Content / Details</th>
+            </tr>
+          </thead>
+          <tbody id="ob-results-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Past Campaigns History -->
+  <div style="padding:0 20px 20px 20px">
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+      <div style="padding:14px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+        <h3 style="font-size:14px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:8px">
+          <span>&#128229;</span> Past Broadcast Campaigns
+        </h3>
+        <button onclick="loadCampaigns()" style="background:none;border:1px solid #d1d5db;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer;color:#374151">
+          &#8635; Refresh
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Campaign Name</th>
+              <th>Mode</th>
+              <th>Prompt / Template</th>
+              <th>Recipients</th>
+              <th>Sent</th>
+              <th>Failed</th>
+              <th>Status</th>
+              <th>Created At</th>
+            </tr>
+          </thead>
+          <tbody id="ob-campaigns-body">
+            <tr><td colspan="9" class="empty">No campaigns run yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <!-- ADD PRODUCT MODAL -->
 <div id="add-product-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -1604,13 +2030,15 @@ let productsBySku = {};
 
 // ---- Tab switching ----
 function showTab(name, btn) {
-  ['orders','customers','inventory','analytics','funnel','settings','refunds','receipts'].forEach(t => {
+  ['orders','customers','inventory','analytics','funnel','bookings','settings','refunds','receipts','outbound'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (name === 'settings') { loadSettings(); refreshWaStatus(); }
   else if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+  if (name === 'bookings') loadBookings();
+  if (name === 'outbound') loadCampaigns();
   if (name === 'refunds') loadRefunds();
   if (name === 'receipts') loadReceipts();
   if (name === 'analytics') renderAnalytics();
@@ -2218,9 +2646,51 @@ async function disconnectWhatsapp() {
 }
 
 // ---- Settings tab ----
+function updateUrduUI(enabled, mode) {
+  const box = document.getElementById('urdu-options-box');
+  const badge = document.getElementById('urdu-badge');
+  const topPill = document.getElementById('topbar-lang-pill');
+  const desc = document.getElementById('urdu-mode-description');
+  if (box) box.style.opacity = enabled ? '1' : '0.45';
+  const modeLabel = mode === 'roman_urdu' ? 'Roman Urdu' : mode === 'urdu_script' ? 'Urdu Script' : 'Urdu & English';
+  if (badge) {
+    if (enabled) {
+      badge.textContent = 'Urdu Active (' + modeLabel + ')';
+      badge.style.background = '#dcfce7';
+      badge.style.color = '#166534';
+    } else {
+      badge.textContent = 'English Only';
+      badge.style.background = '#e5e7eb';
+      badge.style.color = '#4b5563';
+    }
+  }
+  if (topPill) {
+    if (enabled) {
+      topPill.textContent = '🌐 Urdu: ' + (mode === 'auto' ? 'Auto' : mode === 'roman_urdu' ? 'Roman' : 'Script');
+      topPill.style.background = 'rgba(37,211,102,.25)';
+    } else {
+      topPill.textContent = '🌐 English Only';
+      topPill.style.background = 'rgba(255,255,255,.18)';
+    }
+  }
+  if (desc) {
+    if (mode === 'roman_urdu') {
+      desc.innerHTML = '<b>Roman Urdu:</b> Agent communicates primarily in everyday conversational Roman Urdu (Latin script).';
+    } else if (mode === 'urdu_script') {
+      desc.innerHTML = '<b>Urdu Script:</b> Agent communicates primarily in polite, standard Urdu script (اردو رسم الخط).';
+    } else {
+      desc.innerHTML = '<b>Auto-detect:</b> If customer writes in Urdu script, agent replies in Urdu script. If Roman Urdu, agent replies in Roman Urdu. If English, agent replies in English.';
+    }
+  }
+}
+
 async function loadSettings() {
   try {
-    const keys = ['business_name','business_description','delivery_charge','delivery_estimate_days','bank_transfer_details'];
+    const keys = [
+      'business_name','business_description','delivery_charge','delivery_estimate_days',
+      'bank_transfer_details','urdu_enabled','agent_language',
+      'agent_mode','business_knowledge','services_offered','working_hours','meeting_types','custom_instructions'
+    ];
     const results = await Promise.all(keys.map(k => adminFetch('/admin/settings/'+k).then(r=>r.json())));
     const map = {};
     keys.forEach((k,i) => { map[k] = results[i].value || ''; });
@@ -2229,7 +2699,60 @@ async function loadSettings() {
     document.getElementById('setting-delivery-charge').value = map.delivery_charge || '0';
     document.getElementById('setting-delivery-estimate').value = map.delivery_estimate_days || '';
     document.getElementById('setting-bank-details').value = map.bank_transfer_details;
+
+    // Urdu settings
+    const urduOn = map.urdu_enabled !== 'false';
+    const urduToggle = document.getElementById('setting-urdu-toggle');
+    if (urduToggle) urduToggle.checked = urduOn;
+    const langSelect = document.getElementById('setting-agent-language');
+    if (langSelect) langSelect.value = map.agent_language || 'auto';
+    updateUrduUI(urduOn, map.agent_language || 'auto');
+
+    // Agent mode & business knowledge
+    const agentModeEl = document.getElementById('setting-agent-mode');
+    if (agentModeEl) agentModeEl.value = map.agent_mode || 'booking_closer';
+    const kbEl = document.getElementById('setting-business-knowledge');
+    if (kbEl) kbEl.value = map.business_knowledge || '';
+    const srvEl = document.getElementById('setting-services-offered');
+    if (srvEl) srvEl.value = map.services_offered || '';
+    const hrsEl = document.getElementById('setting-working-hours');
+    if (hrsEl) hrsEl.value = map.working_hours || '';
+    const mtgEl = document.getElementById('setting-meeting-types');
+    if (mtgEl) mtgEl.value = map.meeting_types || '';
+    const instEl = document.getElementById('setting-custom-instructions');
+    if (instEl) instEl.value = map.custom_instructions || '';
   } catch(e) { console.warn('Could not load settings:', e.message); }
+}
+
+async function toggleUrduSupport(enabled) {
+  const statusEl = document.getElementById('urdu-setting-status');
+  const val = enabled ? 'true' : 'false';
+  try {
+    const r = await adminFetch('/admin/settings/urdu_enabled', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: val}),
+    });
+    if (!r.ok) { const e = await r.json(); statusEl.textContent = 'Error: ' + (e.detail || r.status); return; }
+    const mode = (document.getElementById('setting-agent-language') || {}).value || 'auto';
+    updateUrduUI(enabled, mode);
+    statusEl.textContent = enabled ? 'Urdu enabled!' : 'Urdu disabled (English only)';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  } catch(e) { statusEl.textContent = 'Error: ' + e.message; }
+}
+
+async function saveLanguageMode(mode) {
+  const statusEl = document.getElementById('urdu-setting-status');
+  try {
+    const r = await adminFetch('/admin/settings/agent_language', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: mode}),
+    });
+    if (!r.ok) { const e = await r.json(); statusEl.textContent = 'Error: ' + (e.detail || r.status); return; }
+    const enabled = (document.getElementById('setting-urdu-toggle') || {}).checked !== false;
+    updateUrduUI(enabled, mode);
+    statusEl.textContent = 'Style saved!';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  } catch(e) { statusEl.textContent = 'Error: ' + e.message; }
 }
 
 async function saveSetting(key, inputId, statusId) {
@@ -2546,6 +3069,349 @@ async function adminRequestResend(id) {
   } catch(e) { alert('Request failed: ' + e.message); }
 }
 
+// ---- Bookings Management (Receptionist & Closer) ----
+let allBookings = [];
+
+async function loadBookings() {
+  try {
+    const data = await safeFetch('/admin/bookings');
+    allBookings = data.bookings || [];
+    renderBookings(allBookings);
+  } catch(e) {
+    const b = document.getElementById('bookings-body');
+    if (b) b.innerHTML = '<tr><td colspan="9" class="empty" style="color:#dc2626">Error: ' + e.message + '</td></tr>';
+  }
+}
+
+function applyBookingFilter() {
+  const st = (document.getElementById('bookings-status-filter') || {}).value;
+  const filtered = st ? allBookings.filter(b => b.status === st) : allBookings;
+  renderBookings(filtered);
+}
+
+function renderBookings(list) {
+  const tbody = document.getElementById('bookings-body');
+  if (!tbody) return;
+  const count = (list || []).length;
+  const countEl = document.getElementById('bookings-count');
+  if (countEl) countEl.textContent = count;
+  const badge = document.getElementById('booking-badge');
+  const confirmed = allBookings.filter(b => b.status === 'confirmed').length;
+  if (badge) {
+    if (confirmed > 0) { badge.textContent = confirmed; badge.style.display = ''; }
+    else badge.style.display = 'none';
+  }
+
+  if (!count) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">No bookings scheduled yet</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = list.map(b => {
+    let stBadge = '<span class="badge b-blue">Confirmed</span>';
+    if (b.status === 'completed') stBadge = '<span class="badge b-green">Completed</span>';
+    else if (b.status === 'cancelled') stBadge = '<span class="badge b-red">Cancelled</span>';
+
+    const actions = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${b.status !== 'completed' ? `
+          <button onclick="updateBookingStatus(${b.id}, 'completed')"
+                  style="background:#16a34a;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+            ✓ Done
+          </button>` : ''}
+        ${b.status !== 'cancelled' ? `
+          <button onclick="updateBookingStatus(${b.id}, 'cancelled')"
+                  style="background:#ef4444;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+            ✕ Cancel
+          </button>` : ''}
+        ${b.status !== 'confirmed' ? `
+          <button onclick="updateBookingStatus(${b.id}, 'confirmed')"
+                  style="background:#2563eb;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+            Reopen
+          </button>` : ''}
+      </div>
+    `;
+
+    return `<tr>
+      <td class="mono" style="font-weight:700">${b.booking_ref}</td>
+      <td style="font-weight:600;color:#1e293b">${b.title || 'Consultation Meeting'}</td>
+      <td style="white-space:nowrap;font-size:13px;font-weight:600;color:#2563eb">${b.start_time}</td>
+      <td><span class="badge b-gray" style="text-transform:capitalize">${b.meeting_type || 'call'}</span></td>
+      <td>${b.customer_name || '<span style="color:#9ca3af">Guest</span>'}</td>
+      <td class="mono" style="font-size:12px">${b.customer_phone || '—'}</td>
+      <td>${stBadge}</td>
+      <td style="max-width:220px;font-size:12px;color:#4b5563">${b.notes || '<span style="color:#9ca3af">None</span>'}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function updateBookingStatus(id, newStatus) {
+  if (!confirm('Change status of booking #' + id + ' to "' + newStatus + '"?')) return;
+  try {
+    const r = await adminFetch('/admin/bookings/' + id + '/status', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus}),
+    });
+    if (!r.ok) {
+      const e = await r.json();
+      alert('Error updating booking: ' + (e.detail || r.status));
+      return;
+    }
+    await loadBookings();
+  } catch(e) {
+    alert('Request failed: ' + e.message);
+  }
+}
+
+// ---- Outbound Messaging & AI Broadcasts ----
+let currentOutboundMode = 'ai_prompt';
+
+function setOutboundMode(mode) {
+  currentOutboundMode = mode;
+  const aiBtn = document.getElementById('ob-mode-ai-btn');
+  const tplBtn = document.getElementById('ob-mode-tpl-btn');
+  const aiSec = document.getElementById('ob-section-ai');
+  const tplSec = document.getElementById('ob-section-tpl');
+
+  if (mode === 'ai_prompt') {
+    if (aiBtn) { aiBtn.style.border = '2px solid #6366f1'; aiBtn.style.background = '#eef2ff'; aiBtn.style.color = '#4338ca'; }
+    if (tplBtn) { tplBtn.style.border = '1px solid #d1d5db'; tplBtn.style.background = '#fff'; tplBtn.style.color = '#4b5563'; }
+    if (aiSec) aiSec.style.display = '';
+    if (tplSec) tplSec.style.display = 'none';
+  } else {
+    if (tplBtn) { tplBtn.style.border = '2px solid #6366f1'; tplBtn.style.background = '#eef2ff'; tplBtn.style.color = '#4338ca'; }
+    if (aiBtn) { aiBtn.style.border = '1px solid #d1d5db'; aiBtn.style.background = '#fff'; aiBtn.style.color = '#4b5563'; }
+    if (tplSec) tplSec.style.display = '';
+    if (aiSec) aiSec.style.display = 'none';
+  }
+}
+
+function setPresetPrompt(type) {
+  setOutboundMode('ai_prompt');
+  const el = document.getElementById('ob-ai-prompt');
+  if (!el) return;
+  if (type === 'consultation') {
+    el.value = 'Invite the customer to book a free 15-minute consultation about our new services this week. Keep it warm, polite, and concise.';
+  } else if (type === 'offer') {
+    el.value = 'Announce our special limited-time 20% discount offer for returning clients on all service packages this month.';
+  } else if (type === 'followup') {
+    el.value = "Politely follow up to check if they have any remaining questions about our business or if they'd like to arrange a quick call.";
+  } else if (type === 'urdu') {
+    el.value = 'Roman Urdu mein polite message bhejo: Salam! Humari taraf se follow up kar rahe hain, kya aap ko kisi service ke baray mein mazeed details ya booking chahiye?';
+  }
+}
+
+function insertTag(tag) {
+  const el = document.getElementById('ob-template-text');
+  if (!el) return;
+  const start = el.selectionStart || 0;
+  const end = el.selectionEnd || 0;
+  const val = el.value;
+  el.value = val.substring(0, start) + tag + val.substring(end);
+  el.focus();
+  el.selectionStart = el.selectionEnd = start + tag.length;
+}
+
+function updateRecipientCount() {
+  const raw = (document.getElementById('ob-recipients') || {}).value || '';
+  const lines = raw.split(/[\n,;]+/);
+  let count = 0;
+  const seen = new Set();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split(/[,:]+/);
+    const candidate = parts[0].trim();
+    const digits = candidate.replace(/\D/g, '');
+    if (digits.length >= 7 && !seen.has(digits)) {
+      seen.add(digits);
+      count++;
+    }
+  }
+  const badge = document.getElementById('ob-recipient-count-badge');
+  if (badge) badge.textContent = count + ' recipient' + (count === 1 ? '' : 's') + ' detected';
+  const btnTxt = document.getElementById('ob-send-btn-text');
+  if (btnTxt) {
+    btnTxt.textContent = count > 0 ? ('Send Broadcast to ' + count + ' Recipient' + (count === 1 ? '' : 's')) : 'Send Broadcast Now';
+  }
+}
+
+async function previewOutbound() {
+  const errEl = document.getElementById('ob-form-error');
+  if (errEl) errEl.style.display = 'none';
+
+  const mode = currentOutboundMode;
+  const prompt_or_template = mode === 'ai_prompt'
+    ? ((document.getElementById('ob-ai-prompt') || {}).value || '').trim()
+    : ((document.getElementById('ob-template-text') || {}).value || '').trim();
+
+  if (!prompt_or_template) {
+    if (errEl) {
+      errEl.textContent = mode === 'ai_prompt' ? 'Please enter an AI prompt first.' : 'Please enter template text first.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  const prevBtn = document.getElementById('ob-preview-btn');
+  if (prevBtn) prevBtn.disabled = true;
+
+  try {
+    const res = await adminFetch('/admin/outbound/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: mode,
+        prompt_or_template: prompt_or_template,
+        sample_name: 'Ali Khan'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Preview generation failed');
+
+    const bubble = document.getElementById('ob-preview-bubble-text');
+    if (bubble) bubble.textContent = data.preview || '';
+
+    const timeEl = document.getElementById('ob-preview-time');
+    if (timeEl) {
+      const now = new Date();
+      timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  } catch(e) {
+    if (errEl) {
+      errEl.textContent = 'Preview error: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (prevBtn) prevBtn.disabled = false;
+  }
+}
+
+async function sendOutboundBroadcast() {
+  const errEl = document.getElementById('ob-form-error');
+  if (errEl) errEl.style.display = 'none';
+
+  const rawRecipients = ((document.getElementById('ob-recipients') || {}).value || '').trim();
+  if (!rawRecipients) {
+    if (errEl) { errEl.textContent = 'Please enter at least one recipient phone number.'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  const mode = currentOutboundMode;
+  const prompt = ((document.getElementById('ob-ai-prompt') || {}).value || '').trim();
+  const template = ((document.getElementById('ob-template-text') || {}).value || '').trim();
+  const campaignName = ((document.getElementById('ob-campaign-name') || {}).value || '').trim();
+
+  if (mode === 'ai_prompt' && !prompt) {
+    if (errEl) { errEl.textContent = 'Please enter an AI prompt for the broadcast.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (mode === 'template' && !template) {
+    if (errEl) { errEl.textContent = 'Please enter template text for the broadcast.'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  if (!confirm('Are you sure you want to send this outbound WhatsApp broadcast? Sent messages will be logged and your AI Agent will handle replies with full context.')) {
+    return;
+  }
+
+  const sendBtn = document.getElementById('ob-send-btn');
+  const sendBtnTxt = document.getElementById('ob-send-btn-text');
+  if (sendBtn) sendBtn.disabled = true;
+  if (sendBtnTxt) sendBtnTxt.textContent = 'Sending Broadcast...';
+
+  try {
+    const res = await adminFetch('/admin/outbound/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipients: rawRecipients,
+        mode: mode,
+        message_text: template,
+        ai_prompt: prompt,
+        campaign_name: campaignName || null
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Broadcast failed');
+
+    // Display execution results
+    const resultsSec = document.getElementById('ob-results-section');
+    if (resultsSec) resultsSec.style.display = 'block';
+    const totalEl = document.getElementById('ob-res-total');
+    if (totalEl) totalEl.textContent = data.total || 0;
+    const sentEl = document.getElementById('ob-res-sent');
+    if (sentEl) sentEl.textContent = data.sent || 0;
+    const failedEl = document.getElementById('ob-res-failed');
+    if (failedEl) failedEl.textContent = data.failed || 0;
+
+    const tbody = document.getElementById('ob-results-body');
+    if (tbody && data.results) {
+      tbody.innerHTML = data.results.map(r => `
+        <tr>
+          <td class="mono" style="font-weight:700">${r.phone || ''}</td>
+          <td>${r.name || '<span style="color:#9ca3af">—</span>'}</td>
+          <td>${r.status === 'sent' ? '<span class="badge b-green">Sent</span>' : '<span class="badge b-red">Failed</span>'}</td>
+          <td style="font-size:12px;color:#374151">${r.message ? r.message.substring(0, 120) + (r.message.length > 120 ? '...' : '') : (r.error || '')}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Refresh campaigns history
+    await loadCampaigns();
+    alert('Broadcast completed: ' + data.sent + ' sent, ' + data.failed + ' failed.');
+  } catch(e) {
+    if (errEl) {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.style.display = 'block';
+    }
+    alert('Broadcast error: ' + e.message);
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    updateRecipientCount();
+  }
+}
+
+async function loadCampaigns() {
+  try {
+    const data = await safeFetch('/admin/outbound/campaigns');
+    const campaigns = data.campaigns || [];
+    const countEl = document.getElementById('outbound-campaigns-count');
+    if (countEl) countEl.textContent = campaigns.length + ' Campaign' + (campaigns.length === 1 ? '' : 's');
+
+    const tbody = document.getElementById('ob-campaigns-body');
+    if (!tbody) return;
+
+    if (!campaigns.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No campaigns run yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = campaigns.map(c => {
+      let stBadge = '<span class="badge b-green">Completed</span>';
+      if (c.status === 'partially_failed') stBadge = '<span class="badge b-amber">Partial</span>';
+      else if (c.status === 'failed') stBadge = '<span class="badge b-red">Failed</span>';
+
+      return `<tr>
+        <td class="mono">#${c.id}</td>
+        <td style="font-weight:600;color:#1e293b">${c.name || 'Outbound Broadcast'}</td>
+        <td><span class="badge b-blue" style="text-transform:capitalize">${c.mode === 'ai_prompt' ? 'AI Prompt' : 'Template'}</span></td>
+        <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(c.template_or_prompt || '').replace(/"/g, '&quot;')}">${c.template_or_prompt || ''}</td>
+        <td style="font-weight:700">${c.total_recipients}</td>
+        <td style="color:#16a34a;font-weight:700">${c.sent_count}</td>
+        <td style="color:#dc2626;font-weight:700">${c.failed_count}</td>
+        <td>${stBadge}</td>
+        <td style="white-space:nowrap;font-size:12px">${fmt_date(c.created_at)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    const tbody = document.getElementById('ob-campaigns-body');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="empty" style="color:#dc2626">Error loading campaigns: ' + e.message + '</td></tr>';
+  }
+}
+
 // ---- Error banner ----
 function showBanner(msg) {
   let b = document.getElementById('err-banner');
@@ -2765,6 +3631,18 @@ async function loadAll() {
     const vBadge = document.getElementById('receipt-badge');
     if (vPending > 0) { vBadge.textContent = vPending; vBadge.style.display = ''; }
     else vBadge.style.display = 'none';
+  } catch(e) { /* non-critical */ }
+
+  try {
+    const bdata = await safeFetch('/admin/bookings');
+    allBookings = bdata.bookings || [];
+    renderBookings(allBookings);
+    const bConfirmed = allBookings.filter(b => b.status === 'confirmed').length;
+    const bBadge = document.getElementById('booking-badge');
+    if (bBadge) {
+      if (bConfirmed > 0) { bBadge.textContent = bConfirmed; bBadge.style.display = ''; }
+      else bBadge.style.display = 'none';
+    }
   } catch(e) { /* non-critical */ }
 
   // Compute derived KPIs from loaded data
@@ -3621,6 +4499,189 @@ async def reject_refund(
         pass
 
     return {"id": refund_id, "status": "rejected", "customer_notified": notified}
+
+
+class BookingStatusUpdate(BaseModel):
+    status: str
+
+
+@router.get("/admin/bookings")
+async def list_admin_bookings(
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Return all client bookings/appointments for the tenant."""
+    from app.db.crud import list_bookings
+
+    rows = await list_bookings(db, tenant_id=tenant_id, status=status, limit=limit, offset=offset)
+    out = [
+        {
+            "id": b.id,
+            "booking_ref": b.booking_ref,
+            "title": b.title,
+            "start_time": b.start_time,
+            "meeting_type": b.meeting_type,
+            "status": b.status,
+            "notes": b.notes,
+            "customer_name": b.customer_name,
+            "customer_phone": b.customer_phone,
+            "customer_id": b.customer_id,
+            "created_at": b.created_at.isoformat() if b.created_at else None,
+            "updated_at": b.updated_at.isoformat() if b.updated_at else None,
+        }
+        for b in rows
+    ]
+    return {"total": len(out), "bookings": out}
+
+
+@router.patch("/admin/bookings/{booking_id}/status")
+async def update_admin_booking_status(
+    booking_id: int,
+    body: BookingStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Update status of a booking (e.g. confirmed, completed, cancelled)."""
+    from app.db.crud import get_booking_by_id, update_booking_status
+
+    existing = await get_booking_by_id(db, booking_id, tenant_id=tenant_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    updated = await update_booking_status(
+        db, booking_id=booking_id, status=body.status, tenant_id=tenant_id
+    )
+    await _audit(
+        db,
+        tenant_id=tenant_id,
+        action="update_booking_status",
+        booking_id=booking_id,
+        booking_ref=existing.booking_ref,
+        status=body.status,
+    )
+    return {
+        "id": updated.id,
+        "booking_ref": updated.booking_ref,
+        "title": updated.title,
+        "start_time": updated.start_time,
+        "meeting_type": updated.meeting_type,
+        "status": updated.status,
+        "notes": updated.notes,
+        "customer_name": updated.customer_name,
+        "customer_phone": updated.customer_phone,
+        "customer_id": updated.customer_id,
+    }
+
+
+class OutboundPreviewRequest(BaseModel):
+    mode: str = "template"
+    prompt_or_template: str
+    sample_name: str = "Customer"
+
+
+class OutboundSendRequest(BaseModel):
+    recipients: str
+    mode: str = "template"
+    message_text: str | None = None
+    ai_prompt: str | None = None
+    campaign_name: str | None = None
+
+
+@router.post("/admin/outbound/preview")
+async def preview_outbound_message_endpoint(
+    body: OutboundPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Generate live preview for an outbound message (template or AI-prompt)."""
+    from app.messaging.outbound import generate_outbound_message_content
+
+    if not body.prompt_or_template.strip():
+        raise HTTPException(status_code=400, detail="Prompt or template text cannot be empty")
+
+    preview_text = await generate_outbound_message_content(
+        prompt_or_template=body.prompt_or_template,
+        mode=body.mode,
+        db=db,
+        tenant_id=tenant_id,
+        recipient_name=body.sample_name,
+    )
+    return {"preview": preview_text}
+
+
+@router.post("/admin/outbound/send")
+async def send_outbound_broadcast_endpoint(
+    body: OutboundSendRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Send proactive outbound messages to multiple recipients with full conversation context memory."""
+    from app.messaging.outbound import execute_outbound_broadcast, parse_recipients_input
+
+    recipients = parse_recipients_input(body.recipients)
+    if not recipients:
+        raise HTTPException(status_code=400, detail="No valid phone numbers found in recipients list")
+
+    prompt_or_template = body.ai_prompt if body.mode == "ai_prompt" else (body.message_text or "")
+    if not prompt_or_template.strip():
+        raise HTTPException(status_code=400, detail="Message content / prompt cannot be empty")
+
+    report = await execute_outbound_broadcast(
+        db,
+        tenant_id=tenant_id,
+        recipients=recipients,
+        prompt_or_template=prompt_or_template,
+        mode=body.mode,
+        campaign_name=body.campaign_name,
+    )
+    await _audit(
+        db,
+        tenant_id=tenant_id,
+        action="outbound_broadcast",
+        total=report.total,
+        sent=report.sent,
+        failed=report.failed,
+        mode=body.mode,
+        campaign_id=report.campaign_id,
+    )
+    return {
+        "campaign_id": report.campaign_id,
+        "total": report.total,
+        "sent": report.sent,
+        "failed": report.failed,
+        "results": report.results,
+    }
+
+
+@router.get("/admin/outbound/campaigns")
+async def list_outbound_campaigns_endpoint(
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """List past outbound broadcast campaigns."""
+    from app.db.crud import list_outbound_campaigns
+
+    campaigns = await list_outbound_campaigns(db, tenant_id=tenant_id, limit=limit, offset=offset)
+    out = [
+        {
+            "id": c.id,
+            "name": c.name,
+            "mode": c.mode,
+            "template_or_prompt": c.template_or_prompt,
+            "total_recipients": c.total_recipients,
+            "sent_count": c.sent_count,
+            "failed_count": c.failed_count,
+            "status": c.status,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in campaigns
+    ]
+    return {"total": len(out), "campaigns": out}
 
 
 @router.get("/admin/tenants")

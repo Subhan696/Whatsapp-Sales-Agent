@@ -319,6 +319,46 @@ async def _process_message_background(
                 delivery_charge = await get_setting(
                     db, "delivery_charge", "0", tenant_id=tenant_id
                 )
+                urdu_enabled = await get_setting(
+                    db, "urdu_enabled", "true", tenant_id=tenant_id
+                )
+                agent_language = await get_setting(
+                    db, "agent_language", "auto", tenant_id=tenant_id
+                )
+                agent_mode = await get_setting(
+                    db, "agent_mode", "booking_closer", tenant_id=tenant_id
+                )
+                business_knowledge = await get_setting(
+                    db, "business_knowledge", "", tenant_id=tenant_id
+                )
+                services_offered = await get_setting(
+                    db, "services_offered", "", tenant_id=tenant_id
+                )
+                working_hours = await get_setting(
+                    db, "working_hours", "", tenant_id=tenant_id
+                )
+                meeting_types = await get_setting(
+                    db, "meeting_types", "", tenant_id=tenant_id
+                )
+                custom_instructions = await get_setting(
+                    db, "custom_instructions", "", tenant_id=tenant_id
+                )
+
+                customer_active_bookings = "None yet"
+                try:
+                    from app.db.crud import list_customer_bookings
+
+                    cust_bookings = await list_customer_bookings(
+                        db, customer.id, tenant_id=tenant_id, limit=5
+                    )
+                    if cust_bookings:
+                        booking_lines = [
+                            f"• [{b.booking_ref}] {b.title} on {b.start_time} (Format: {b.meeting_type}, Status: {b.status})"
+                            for b in cust_bookings
+                        ]
+                        customer_active_bookings = "\n".join(booking_lines)
+                except Exception:
+                    customer_active_bookings = "None yet"
 
             # Rebuild conversation as LangChain messages (oldest → newest).
             # The current inbound message was already committed by ingest_message,
@@ -351,6 +391,15 @@ async def _process_message_background(
                 "business_name": business_name or None,
                 "business_description": business_description or None,
                 "delivery_charge": delivery_charge or None,
+                "urdu_enabled": urdu_enabled or "true",
+                "agent_language": agent_language or "auto",
+                "agent_mode": agent_mode or "booking_closer",
+                "business_knowledge": business_knowledge or None,
+                "services_offered": services_offered or None,
+                "working_hours": working_hours or None,
+                "meeting_types": meeting_types or None,
+                "custom_instructions": custom_instructions or None,
+                "customer_active_bookings": customer_active_bookings,
             }
             graph = get_graph()
             await graph.ainvoke(initial_state, config={})

@@ -49,8 +49,10 @@ async def _drive_background(message: Message):
         patch("app.agents.graph.get_graph", return_value=graph),
         patch("app.db.crud.get_conversation_history", AsyncMock(return_value=[])),
         patch("app.db.crud.get_latest_cancellable_order_ref", AsyncMock(return_value=None)),
+        patch("app.db.crud.get_latest_active_order", AsyncMock(return_value=None)),
         patch("app.db.crud.get_setting", AsyncMock(return_value="")),
         patch("app.agents.tools.payments.process_receipt_image", receipt_mock),
+        patch("app.db.crud.list_customer_bookings", AsyncMock(return_value=[])),
     ):
         await router._process_message_background(
             message, Contact(wa_id="923000000000", profile=ContactProfile(name="Test")),

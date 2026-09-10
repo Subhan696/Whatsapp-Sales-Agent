@@ -55,3 +55,28 @@ class AgentState(TypedDict):
 
     # Delivery charge configured by admin to be quoted before order creation
     delivery_charge: str | None
+
+    # Urdu language texting toggle ("true" | "false") & style ("auto" | "roman_urdu" | "urdu_script")
+    urdu_enabled: str | None
+    agent_language: str | None
+
+    # Agent role/mode: "booking_closer" | "sales" | "hybrid"
+    agent_mode: str | None
+
+    # Full business explanation, knowledge base, policies, FAQs
+    business_knowledge: str | None
+
+    # Services offered, pricing, packages
+    services_offered: str | None
+
+    # Working hours and meeting availability
+    working_hours: str | None
+
+    # Available meeting formats (e.g. WhatsApp Call, Zoom, In-person)
+    meeting_types: str | None
+
+    # Custom owner instructions / closing guidance
+    custom_instructions: str | None
+
+    # Formatted list of customer's active / upcoming bookings for context memory
+    customer_active_bookings: str | None

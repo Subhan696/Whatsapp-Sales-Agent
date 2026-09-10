@@ -133,6 +133,7 @@ class Customer(Base):
     message_logs: Mapped[list[MessageLog]] = relationship("MessageLog", back_populates="customer")
     stage_histories: Mapped[list[StageHistory]] = relationship("StageHistory", back_populates="customer")
     events: Mapped[list[Event]] = relationship("Event", back_populates="customer")
+    bookings: Mapped[list[Booking]] = relationship("Booking", back_populates="customer")
 
     __table_args__ = (UniqueConstraint("tenant_id", "wa_id", name="uq_customers_tenant_wa_id"),)
 
@@ -375,3 +376,70 @@ class Event(Base):
     customer: Mapped[Customer | None] = relationship("Customer", back_populates="events")
 
     __table_args__ = (Index("ix_events_customer_created", "customer_id", "created_at"),)
+
+
+class Booking(Base):
+    """Customer appointment / meeting booked by the agent or admin."""
+
+    __tablename__ = "bookings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
+    customer_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("customers.id"), nullable=False, index=True
+    )
+    booking_ref: Mapped[str] = mapped_column(String(30), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    start_time: Mapped[str] = mapped_column(String(100), nullable=False)
+    meeting_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="whatsapp_call", server_default="whatsapp_call"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="confirmed", server_default="confirmed"
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    customer: Mapped[Customer] = relationship("Customer", back_populates="bookings")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "booking_ref", name="uq_bookings_tenant_booking_ref"),
+        Index("ix_bookings_tenant_customer", "tenant_id", "customer_id"),
+    )
+
+
+class OutboundCampaign(Base):
+    """Outbound broadcast campaign sent to multiple numbers."""
+
+    __tablename__ = "outbound_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, default=1, server_default="1", index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mode: Mapped[str] = mapped_column(String(50), nullable=False, default="template", server_default="template")
+    template_or_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    total_recipients: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    sent_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="completed", server_default="completed"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_outbound_campaigns_tenant_created", "tenant_id", "created_at"),
+    )
+

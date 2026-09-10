@@ -115,6 +115,7 @@ async def send_text_message(
     *,
     settings: Settings | None = None,
     _client: WhatsAppClient | None = None,
+    bypass_window: bool = False,
 ) -> OutboundResult:
     """Send a free-form text to ``customer``.
 
@@ -123,6 +124,8 @@ async def send_text_message(
     propagate so callers can write an error event and inform the user.
 
     ``_client`` and ``settings`` are injectable for tests.
+    ``bypass_window=True`` allows outbound campaign broadcasts or messages
+    initiated directly by the business.
     """
     cfg = settings or get_settings()
     client = await _get_client_for_tenant(db, customer, _client)
@@ -133,7 +136,7 @@ async def send_text_message(
         return _opted_out()
 
     # 2. 24-hour window check
-    if not is_within_service_window(customer, cfg):
+    if not bypass_window and not is_within_service_window(customer, cfg):
         logger.info(
             "send_blocked_outside_window",
             customer_id=customer.id,
@@ -149,6 +152,26 @@ async def send_text_message(
     await recorder.record_message_out(db, customer, body, wa_message_id=wa_mid)
 
     return _sent(wa_mid)
+
+
+async def send_outbound_to_customer(
+    db: AsyncSession,
+    customer: Customer,
+    body: str,
+    *,
+    bypass_window: bool = True,
+    settings: Settings | None = None,
+    _client: WhatsAppClient | None = None,
+) -> OutboundResult:
+    """Send an outbound broadcast or initiated message to customer."""
+    return await send_text_message(
+        db,
+        customer,
+        body,
+        settings=settings,
+        _client=_client,
+        bypass_window=bypass_window,
+    )
 
 
 async def send_media_message(
