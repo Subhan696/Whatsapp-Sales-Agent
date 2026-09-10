@@ -1125,6 +1125,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     <h1><div class="wa-dot">&#128241;</div> Business <span>CRM</span></h1>
   </div>
   <div class="refresh-row">
+    <span id="topbar-agent-pill" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:#10b981;color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:4px;box-shadow:0 1px 3px rgba(0,0,0,.15)" onclick="toggleAgentActiveFromTopbar()" title="Click to turn AI Agent ON/OFF">&#9679; Agent: ON</span>
     <span id="topbar-lang-pill" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer" onclick="showTab('settings')" title="Click to manage language settings">&#127760; Urdu: ON</span>
     <span id="last-updated">Loading…</span>
     <span class="topbar-user" id="topbar-user"></span>
@@ -1401,6 +1402,27 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
           <b>Staying connected:</b> The session is saved, so it survives app restarts — you don't need to re-scan unless you disconnect here or unlink it from your phone.
         </div>
       </details>
+    </div>
+
+    <div style="border:1px solid #d1d5db;border-radius:10px;padding:20px;background:#f9fafb">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <label style="font-size:14px;font-weight:700;color:#111827;display:flex;align-items:center;gap:6px">
+            <span>&#9889;</span> AI Agent Master Switch (Active / Paused)
+          </label>
+          <p style="font-size:12px;color:#6b7280;margin-top:2px">
+            Turn automatic AI responses ON or OFF. When OFF, the bot pauses auto-replies so you can text customers manually on WhatsApp. Messages are still logged in the CRM.
+          </p>
+        </div>
+        <label class="switch">
+          <input id="setting-agent-active-toggle" type="checkbox" checked onchange="toggleAgentActive(this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+        <span id="agent-active-badge" style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;background:#dcfce7;color:#16a34a">&#9679; Agent is Active (Auto-replying)</span>
+        <span id="agent-active-status" style="font-size:12px;color:#6b7280"></span>
+      </div>
     </div>
 
     <div style="border:1px solid #d1d5db;border-radius:10px;padding:20px;background:#f9fafb">
@@ -2781,7 +2803,7 @@ async function loadSettings() {
   try {
     const keys = [
       'business_name','business_description','delivery_charge','delivery_estimate_days',
-      'bank_transfer_details','urdu_enabled','agent_language',
+      'bank_transfer_details','urdu_enabled','agent_language','agent_active',
       'agent_mode','business_knowledge','services_offered','working_hours','meeting_types','custom_instructions'
     ];
     const results = await Promise.all(keys.map(k => adminFetch('/admin/settings/'+k).then(r=>r.json())));
@@ -2792,6 +2814,10 @@ async function loadSettings() {
     document.getElementById('setting-delivery-charge').value = map.delivery_charge || '0';
     document.getElementById('setting-delivery-estimate').value = map.delivery_estimate_days || '';
     document.getElementById('setting-bank-details').value = map.bank_transfer_details;
+
+    // Agent active master switch
+    const agentActive = map.agent_active !== 'false';
+    updateAgentActiveUI(agentActive);
 
     // Urdu settings
     const urduOn = map.urdu_enabled !== 'false';
@@ -2815,6 +2841,81 @@ async function loadSettings() {
     const instEl = document.getElementById('setting-custom-instructions');
     if (instEl) instEl.value = map.custom_instructions || '';
   } catch(e) { console.warn('Could not load settings:', e.message); }
+}
+
+let currentAgentActiveState = true;
+
+function updateAgentActiveUI(active) {
+  currentAgentActiveState = !!active;
+  const toggle = document.getElementById('setting-agent-active-toggle');
+  if (toggle) toggle.checked = currentAgentActiveState;
+
+  const badge = document.getElementById('agent-active-badge');
+  if (badge) {
+    if (active) {
+      badge.innerHTML = '&#9679; Agent is Active (Auto-replying)';
+      badge.style.color = '#16a34a';
+      badge.style.background = '#dcfce7';
+    } else {
+      badge.innerHTML = '&#10074;&#10074; Agent is Paused (Manual chat mode)';
+      badge.style.color = '#dc2626';
+      badge.style.background = '#fee2e2';
+    }
+  }
+
+  const topPill = document.getElementById('topbar-agent-pill');
+  if (topPill) {
+    if (active) {
+      topPill.innerHTML = '&#9679; Agent: ON';
+      topPill.style.background = '#10b981';
+      topPill.title = 'AI Agent is ON — Click to pause auto-replies';
+    } else {
+      topPill.innerHTML = '&#10074;&#10074; Agent: PAUSED';
+      topPill.style.background = '#ef4444';
+      topPill.title = 'AI Agent is PAUSED — Click to enable auto-replies';
+    }
+  }
+}
+
+async function toggleAgentActive(active) {
+  const statusEl = document.getElementById('agent-active-status');
+  const val = active ? 'true' : 'false';
+  updateAgentActiveUI(active);
+  try {
+    const r = await adminFetch('/admin/settings/agent_active', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: val})
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      if (statusEl) statusEl.textContent = 'Error: ' + (e.detail || r.status);
+      updateAgentActiveUI(!active);
+      return;
+    }
+    if (statusEl) {
+      statusEl.textContent = active ? 'Agent enabled!' : 'Agent paused!';
+      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+    updateAgentActiveUI(!active);
+  }
+}
+
+function toggleAgentActiveFromTopbar() {
+  toggleAgentActive(!currentAgentActiveState);
+}
+
+async function loadAgentActiveSetting() {
+  try {
+    const r = await adminFetch('/admin/settings/agent_active');
+    if (r.ok) {
+      const d = await r.json();
+      const active = d.value !== 'false';
+      updateAgentActiveUI(active);
+    }
+  } catch(e) {}
 }
 
 async function toggleUrduSupport(enabled) {
@@ -3768,6 +3869,10 @@ async function loadAll() {
 
   // Compute derived KPIs from loaded data
   refreshComputedKPIs();
+
+  try {
+    await loadAgentActiveSetting();
+  } catch(e) { /* non-critical */ }
 
   if (errs.length) {
     showBanner('Dashboard errors: ' + errs.join(' | '));

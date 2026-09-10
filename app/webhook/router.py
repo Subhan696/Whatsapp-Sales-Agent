@@ -299,6 +299,18 @@ async def _process_message_background(
 
             # Load conversation history + admin settings in one session
             async with factory() as db:
+                agent_active = await get_setting(
+                    db, "agent_active", "true", tenant_id=tenant_id
+                )
+                if (agent_active or "").strip().lower() == "false":
+                    logger.info(
+                        "agent_paused_skipping_graph",
+                        tenant_id=tenant_id,
+                        customer_id=customer.id,
+                        message_id=message.id,
+                    )
+                    return
+
                 history_rows = await get_conversation_history(
                     db, customer.id, tenant_id=tenant_id, limit=100
                 )
