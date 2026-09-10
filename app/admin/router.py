@@ -2694,8 +2694,8 @@ async function connectWhatsapp(force = false) {
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       const msg = err.detail || ('HTTP ' + r.status);
-      alert('Could not connect to WhatsApp bridge:\n' + msg +
-            '\n\nIf running in Docker, ensure the bridge service is up:\ndocker compose up -d --build bridge');
+      alert('Could not connect to WhatsApp bridge:\\n' + msg +
+            '\\n\\nIf running in Docker, ensure the bridge service is up:\\ndocker compose up -d --build bridge');
       setWaBadge('error', msg);
       if (btn) {
         btn.disabled = false;
@@ -2720,7 +2720,7 @@ async function connectWhatsapp(force = false) {
 }
 
 async function disconnectWhatsapp() {
-  if (!confirm('Disconnect WhatsApp and stop the agent?\n\nThe agent will stop receiving and replying to messages. Reconnecting later requires scanning a new QR code.')) return;
+  if (!confirm('Disconnect WhatsApp and stop the agent?\\n\\nThe agent will stop receiving and replying to messages. Reconnecting later requires scanning a new QR code.')) return;
   const btn = document.getElementById('wa-disconnect-btn');
   btn.disabled = true; btn.textContent = 'Disconnecting…';
   try {
