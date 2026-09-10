@@ -24,7 +24,27 @@ function getRowLock(lockKey) {
   return mutex;
 }
 
+let tableEnsured = false;
+async function ensureAuthTable(pool) {
+  if (tableEnsured) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS baileys_auth_state (
+        tenant_id INTEGER NOT NULL,
+        key_name VARCHAR(255) NOT NULL,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT pk_baileys_auth_state PRIMARY KEY (tenant_id, key_name)
+      )
+    `);
+    tableEnsured = true;
+  } catch (e) {
+    console.warn('[wa-bridge] ensureAuthTable warning:', e.message);
+  }
+}
+
 async function usePostgresAuthState(pool, tenantId) {
+  await ensureAuthTable(pool);
   const writeData = async (data, keyName) => {
     const lockKey = `${tenantId}:${keyName}`;
     const release = await getRowLock(lockKey).acquire();

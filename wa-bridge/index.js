@@ -310,8 +310,13 @@ async function ensureSession(tenantId, force = false) {
 
 async function getBootTenantIds() {
   if (pgPool) {
-    const res = await pgPool.query("SELECT id FROM tenants WHERE status = 'active' ORDER BY id");
-    return res.rows.map((r) => String(r.id));
+    try {
+      const res = await pgPool.query("SELECT id FROM tenants WHERE status = 'active' ORDER BY id");
+      return res.rows.map((r) => String(r.id));
+    } catch (e) {
+      console.warn('[wa-bridge] could not query tenants table, falling back to default TENANT_IDS:', e.message);
+      return TENANT_IDS;
+    }
   }
   return TENANT_IDS;
 }
