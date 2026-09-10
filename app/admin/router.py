@@ -1125,7 +1125,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     <h1><div class="wa-dot">&#128241;</div> Business <span>CRM</span></h1>
   </div>
   <div class="refresh-row">
-    <span id="topbar-lang-pill" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer" onclick="showTab('settings', document.querySelector('.tab[onclick*=\'settings\']'))" title="Click to manage language settings">&#127760; Urdu: ON</span>
+    <span id="topbar-lang-pill" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer" onclick="showTab('settings')" title="Click to manage language settings">&#127760; Urdu: ON</span>
     <span id="last-updated">Loading…</span>
     <span class="topbar-user" id="topbar-user"></span>
     <button onclick="loadAll()">&#8635; Refresh</button>
@@ -1200,9 +1200,9 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <button class="tab" onclick="showTab('analytics',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128202; Analytics</button>
   <button class="tab" onclick="showTab('funnel',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128200; Funnel</button>
   <button class="tab" id="tab-btn-bookings" onclick="showTab('bookings',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128197; Bookings <span id="booking-badge" style="display:none;background:#2563eb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
-  <button class="tab" id="tab-btn-outbound" onclick="showTab('outbound',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128227; Outbound</button>
-  <button class="tab" onclick="showTab('settings',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#9881; Settings</button>
-  <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
+  <button class="tab" id="tab-btn-outbound" onclick="showTab('outbound',this); document.getElementById('tabs').classList.remove('open')">&#128227; Outbound</button>
+  <button class="tab" id="tab-btn-settings" onclick="showTab('settings',this); document.getElementById('tabs').classList.remove('open')">&#9881; Settings</button>
+  <button class="tab" id="tab-btn-refunds" onclick="showTab('refunds',this); document.getElementById('tabs').classList.remove('open')">&#128272; Refunds <span id="refund-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
   <button class="tab" id="tab-btn-receipts" onclick="showTab('receipts',this); document.getElementById(\'tabs\').classList.remove(\'open\')">&#128247; Receipts <span id="receipt-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:3px">0</span></button>
 </div>
 
@@ -2039,10 +2039,14 @@ let productsBySku = {};
 // ---- Tab switching ----
 function showTab(name, btn) {
   ['orders','customers','inventory','analytics','funnel','bookings','settings','refunds','receipts','outbound'].forEach(t => {
-    document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
+    const el = document.getElementById('tab-'+t);
+    if (el) el.style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  if (!btn) {
+    btn = document.getElementById('tab-btn-' + name);
+  }
+  if (btn) btn.classList.add('active');
   if (name === 'settings') { loadSettings(); refreshWaStatus(); }
   else { stopWaPolling(); }
   if (name === 'bookings') loadBookings();
