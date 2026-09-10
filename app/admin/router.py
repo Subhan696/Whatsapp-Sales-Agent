@@ -3502,13 +3502,41 @@ async function handleAuth(e) {
 }
 
 function copyApiKey() {
-  const val = document.getElementById('apikey-value').textContent;
-  navigator.clipboard.writeText(val).then(() => {
-    const btn = document.getElementById('copy-btn');
-    btn.textContent = 'Copied!';
-    btn.style.background = '#10b981';
-    setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
-  });
+  const val = (document.getElementById('apikey-value') || {}).textContent || '';
+  const btn = document.getElementById('copy-btn');
+  const onSuccess = () => {
+    if (btn) {
+      btn.textContent = 'Copied!';
+      btn.style.background = '#10b981';
+      setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
+    }
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(val).then(onSuccess).catch(() => fallbackCopy(val, onSuccess));
+  } else {
+    fallbackCopy(val, onSuccess);
+  }
+}
+
+function fallbackCopy(text, onSuccess) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) {
+      if (onSuccess) onSuccess();
+      return;
+    }
+  } catch(e) {}
+  prompt('Copy your API key manually (Ctrl+C, Enter):', text);
 }
 
 function dismissApiKeyPanel() {
