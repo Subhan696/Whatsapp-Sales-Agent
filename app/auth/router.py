@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.base import get_db
 from app.db.crud import create_tenant, get_tenant_by_email
+from app.dependencies import require_superadmin
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -48,7 +49,11 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
 
 
 @router.post("/signup", response_model=AuthResponse)
-async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
+async def signup(
+    request: SignupRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_superadmin),
+):
     existing = await get_tenant_by_email(db, email=request.email)
     if existing:
         raise HTTPException(

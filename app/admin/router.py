@@ -1080,16 +1080,8 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <div class="auth-form-panel" id="auth-form-panel">
     <h3 id="auth-title">Welcome back</h3>
     <p class="auth-subtitle" id="auth-subtitle">Sign in to your dashboard</p>
-    <div class="auth-tabs">
-      <button class="auth-tab active" id="tab-login" onclick="setAuthMode('login')">Log In</button>
-      <button class="auth-tab" id="tab-signup" onclick="setAuthMode('signup')">Sign Up</button>
-    </div>
     <div id="auth-error" class="auth-error"></div>
     <form id="auth-form" onsubmit="handleAuth(event)">
-      <div class="auth-field" id="field-business" style="display:none">
-        <label for="auth-business">Business Name</label>
-        <input type="text" id="auth-business" placeholder="e.g. Acme Wholesale" autocomplete="organization">
-      </div>
       <div class="auth-field">
         <label for="auth-email">Email Address</label>
         <input type="email" id="auth-email" placeholder="you@example.com" required autocomplete="email">
@@ -1103,9 +1095,6 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
       <button type="submit" id="auth-btn" class="auth-submit">Log In</button>
     </form>
-    <p class="auth-switch" id="auth-switch-text">
-      Don&#39;t have an account? <span onclick="setAuthMode('signup')">Sign up free</span>
-    </p>
   </div>
   <div class="auth-apikey-panel" id="auth-apikey-panel">
     <div class="apikey-icon">&#128273;</div>
@@ -3629,24 +3618,35 @@ let authMode = 'login';
 function setAuthMode(mode) {
   authMode = mode;
   const isSignup = mode === 'signup';
-  document.getElementById('auth-title').textContent = isSignup ? 'Create your account' : 'Welcome back';
-  document.getElementById('auth-subtitle').textContent = isSignup ? 'Start managing your WhatsApp sales' : 'Sign in to your dashboard';
-  document.getElementById('auth-btn').textContent = isSignup ? 'Create Account' : 'Log In';
+  const title = document.getElementById('auth-title');
+  if (title) title.textContent = isSignup ? 'Create your account' : 'Welcome back';
+  const sub = document.getElementById('auth-subtitle');
+  if (sub) sub.textContent = isSignup ? 'Start managing your WhatsApp sales' : 'Sign in to your dashboard';
+  const btn = document.getElementById('auth-btn');
+  if (btn) btn.textContent = isSignup ? 'Create Account' : 'Log In';
   const bField = document.getElementById('field-business');
-  bField.style.display = isSignup ? 'block' : 'none';
-  document.getElementById('auth-business').required = isSignup;
+  if (bField) {
+    bField.style.display = isSignup ? 'block' : 'none';
+    const bInp = document.getElementById('auth-business');
+    if (bInp) bInp.required = isSignup;
+  }
   const sw = document.getElementById('auth-switch-text');
-  sw.innerHTML = isSignup
-    ? `Already have an account? <span onclick="setAuthMode('login')">Log in</span>`
-    : `Don't have an account? <span onclick="setAuthMode('signup')">Sign up free</span>`;
-  document.getElementById('tab-login').classList.toggle('active', !isSignup);
-  document.getElementById('tab-signup').classList.toggle('active', isSignup);
-  document.getElementById('auth-error').style.display = 'none';
+  if (sw) {
+    sw.innerHTML = isSignup
+      ? `Already have an account? <span onclick="setAuthMode('login')">Log in</span>`
+      : `Don't have an account? <span onclick="setAuthMode('signup')">Sign up free</span>`;
+  }
+  const tabL = document.getElementById('tab-login');
+  if (tabL) tabL.classList.toggle('active', !isSignup);
+  const tabS = document.getElementById('tab-signup');
+  if (tabS) tabS.classList.toggle('active', isSignup);
+  const err = document.getElementById('auth-error');
+  if (err) err.style.display = 'none';
 }
 
 function togglePw() {
   const inp = document.getElementById('auth-password');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
+  if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
 }
 
 async function handleAuth(e) {
@@ -3656,9 +3656,9 @@ async function handleAuth(e) {
   const errDiv = document.getElementById('auth-error');
   errDiv.style.display = 'none';
 
-  const email = document.getElementById('auth-email').value.trim();
-  const password = document.getElementById('auth-password').value;
-  const business = document.getElementById('auth-business').value.trim();
+  const email = (document.getElementById('auth-email') || {}).value?.trim() || '';
+  const password = (document.getElementById('auth-password') || {}).value || '';
+  const business = (document.getElementById('auth-business') || {}).value?.trim() || '';
 
   const url = authMode === 'login' ? '/auth/login' : '/auth/signup';
   const payload = authMode === 'login'
@@ -4349,7 +4349,11 @@ async function createAccount() {
   const pass  = document.getElementById('new-pass').value;
   if (!name || !email || !pass) { showToast('All three fields are required', true); return; }
   const r = await fetch('/auth/signup', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Superadmin-Key': getSaKey()
+    },
     body: JSON.stringify({business_name: name, email, password: pass})
   });
   const data = await r.json();
