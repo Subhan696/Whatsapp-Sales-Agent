@@ -152,6 +152,14 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 
 
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root to the admin dashboard."""
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url="/admin")
+
+
 @app.get("/health", tags=["ops"])
 async def health() -> dict:
     """Liveness probe — returns 200 if the process is alive."""
