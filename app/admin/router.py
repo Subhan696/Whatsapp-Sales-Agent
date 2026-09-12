@@ -4120,7 +4120,7 @@ _SUPERADMIN_HTML = """<!DOCTYPE html>
   }
 </style>
 </head>
-<body style="visibility:hidden">
+<body>
 
 <!-- LOGIN -->
 <div id="login-page">
@@ -4361,7 +4361,7 @@ async function rotateKey(id) {
 }
 
 async function deleteTenant(id) {
-  if (!confirm('Permanently delete tenant #' + id + '?\n\nOnly tenants with NO customers or orders can be deleted.\nUse Suspend instead for tenants with data.')) return;
+  if (!confirm('Permanently delete tenant #' + id + '? Only tenants with NO customers or orders can be deleted.')) return;
   const r = await saFetch('/admin/tenants/' + id, {method: 'DELETE'});
   const data = await r.json().catch(() => ({}));
   if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
