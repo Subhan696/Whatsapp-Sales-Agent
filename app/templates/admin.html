@@ -28,6 +28,19 @@
     --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     --mono: 'JetBrains Mono', monospace;
   }
+  
+  [data-theme="light"] {
+    --bg-base: #f1f5f9;
+    --bg-surface: #f8fafc;
+    --bg-card: #ffffff;
+    --bg-card-hover: #e2e8f0;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-highlight: rgba(16, 185, 129, 0.3);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --accent-glow: rgba(16, 185, 129, 0.15);
+  }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -521,26 +534,20 @@
     z-index: 9999;
     display: flex;
     align-items: stretch;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
   }
   .auth-brand {
     flex: 0 0 48%;
-    background: radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 60%),
-                #0b121e;
+    background: var(--bg-surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 56px 52px;
+    padding: 32px 40px;
     color: var(--text-primary);
     position: relative;
-    overflow-y: auto;
   }
-  .auth-bubble { position: absolute; border-radius: 50%; background: #10b981; animation: float ease-in-out infinite; pointer-events: none; }
-  .auth-bubble-1 { width: 260px; height: 260px; top: -90px; right: -70px; opacity: .08; animation-duration: 10s; }
-  .auth-bubble-2 { width: 140px; height: 140px; bottom: 80px; right: 40px; opacity: .1; animation-duration: 7s; animation-delay: -3s; }
-  .auth-bubble-3 { width: 80px; height: 80px; top: 40%; right: 15%; opacity: .12; animation-duration: 5s; animation-delay: -1.5s; }
   
   .auth-brand-inner { position: relative; z-index: 2; }
   .auth-logo-badge {
@@ -570,33 +577,34 @@
     -webkit-text-fill-color: transparent;
   }
   .auth-brand p.tagline {
-    font-size: 15px;
+    font-size: 14px;
     color: var(--text-secondary);
-    line-height: 1.6;
-    margin-bottom: 32px;
-    max-width: 90%;
+    line-height: 1.5;
+    margin-bottom: 24px;
+    max-width: 95%;
   }
 
   /* 6 Showcase Features Grid */
   .feature-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    margin-bottom: 32px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
   }
   .feat-card {
-    background: rgba(17, 24, 39, 0.7);
+    background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
+    border-radius: 10px;
+    padding: 12px;
     display: flex;
-    gap: 14px;
+    flex-direction: column;
+    gap: 10px;
     align-items: flex-start;
-    transition: border-color .2s, transform .2s;
+    transition: border-color .2s, box-shadow .2s;
   }
   .feat-card:hover {
     border-color: var(--border-highlight);
-    transform: translateX(3px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   }
   .feat-icon {
     width: 36px;
@@ -632,22 +640,42 @@
   /* Right Side Auth Form */
   .auth-form-panel {
     flex: 1;
-    background: var(--bg-surface);
+    background: var(--bg-base);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 60px 48px;
-    overflow-y: auto;
+    padding: 32px;
+    position: relative;
   }
   .auth-card-inner {
     width: 440px;
     max-width: 100%;
-    background: var(--bg-card);
+    background: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: 20px;
+    border-radius: 16px;
     padding: 40px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+  }
+  .theme-toggle-btn {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .theme-toggle-btn:hover {
+    background: var(--bg-card-hover);
   }
   .auth-card-inner h3 {
     font-size: 24px;
@@ -861,10 +889,6 @@
 <div id="auth-overlay" class="auth-overlay" style="display:none">
   <!-- Left Side: Helio Feature Showcase Matrix -->
   <div class="auth-brand">
-    <div class="auth-bubble auth-bubble-1"></div>
-    <div class="auth-bubble auth-bubble-2"></div>
-    <div class="auth-bubble auth-bubble-3"></div>
-
     <div class="auth-brand-inner">
       <div class="auth-logo-badge">
         <span>&#9889; Helio Suite</span>
@@ -932,6 +956,9 @@
 
   <!-- Right Side: Clean Login Panel -->
   <div class="auth-form-panel">
+    <button type="button" class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+      <span id="theme-icon">&#9728;</span> <span id="theme-text">Light Mode</span>
+    </button>
     <div class="auth-card-inner" id="auth-form-panel">
       <h3 id="auth-title">Welcome to Helio</h3>
       <p class="auth-subtitle" id="auth-subtitle">Sign in to access your business CRM</p>
@@ -3753,7 +3780,42 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.innerHTML = '&#128064; Show Summary';
     }
   }
+
+  // Initialize theme
+  const savedTheme = localStorage.getItem('theme');
+  const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+  if (savedTheme === 'light' || (!savedTheme && prefersLight)) {
+    document.documentElement.setAttribute('data-theme', 'light');
+    const icon = document.getElementById('theme-icon');
+    const text = document.getElementById('theme-text');
+    if (icon && text) {
+      icon.innerHTML = '&#9789;';
+      text.innerText = 'Dark Mode';
+    }
+  }
 });
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const icon = document.getElementById('theme-icon');
+  const text = document.getElementById('theme-text');
+  
+  if (currentTheme === 'light') {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('theme', 'dark');
+    if (icon && text) {
+      icon.innerHTML = '&#9728;';
+      text.innerText = 'Light Mode';
+    }
+  } else {
+    document.documentElement.setAttribute('data-theme', 'light');
+    localStorage.setItem('theme', 'light');
+    if (icon && text) {
+      icon.innerHTML = '&#9789;';
+      text.innerText = 'Dark Mode';
+    }
+  }
+}
 </script>
 </body>
 </html>
