@@ -583,15 +583,47 @@
     margin-bottom: 24px;
     max-width: 95%;
   }
+  .btn-demo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--accent);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .btn-demo:hover {
+    background: var(--accent);
+    color: #042f2e;
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
 
   /* 6 Showcase Features Grid */
-  .feature-grid {
-    display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    grid-auto-rows: min-content;
+  .feature-bento {
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     margin-bottom: 24px;
   }
+  .bento-top, .bento-mid, .bento-bot {
+    display: flex;
+    gap: 12px;
+  }
+  .bento-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .bento-col.main-col { flex: 1.1; }
+  .bento-col.side-col { flex: 1; }
+  
+  .bento-mid .feat-card, .bento-bot .feat-card { flex: 1; }
+  
   .feat-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -601,14 +633,13 @@
     flex-direction: column;
     gap: 6px;
     transition: all .3s ease;
+    height: 100%;
   }
   .feat-card:hover {
     border-color: rgba(255,255,255,0.15);
     background: var(--bg-card-hover);
   }
   .feat-card.main-focus {
-    grid-column: 1;
-    grid-row: 1 / span 2;
     background: linear-gradient(160deg, rgba(16,185,129,0.06), transparent), var(--bg-card);
     border-color: rgba(16,185,129,0.15);
     padding: 24px 20px;
@@ -628,10 +659,6 @@
     color: var(--text-primary);
     opacity: 0.85;
   }
-  .feat-card.wide {
-    grid-column: 1 / -1;
-  }
-
   .feat-card h4 { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
   .feat-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
 
@@ -899,46 +926,70 @@
   <!-- Left Side: Helio Feature Showcase Matrix -->
   <div class="auth-brand">
     <div class="auth-brand-inner">
-      <div class="auth-logo-badge">
-        <span>&#9889; Helio Suite</span>
+      <div class="auth-logo-badge" style="gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="24" height="24" rx="6" fill="url(#helio-grad)"/>
+          <path d="M7 8H9V16H7V8Z" fill="white"/>
+          <path d="M15 8H17V16H15V8Z" fill="white"/>
+          <path d="M9 11H15V13H9V11Z" fill="white"/>
+          <defs>
+            <linearGradient id="helio-grad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#10b981"/>
+              <stop offset="1" stop-color="#0ea5e9"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span>Helio Suite</span>
         <span>&bull;</span>
         <span>v2.4 Pro</span>
       </div>
       <h2>Enterprise Conversational<br><span>AI Commerce Engine</span></h2>
       <p class="tagline">Automating client acquisition, 24/7 intelligent sales closing, consultations, and operations directly on WhatsApp.</p>
+      
+      <div style="margin-bottom: 32px;">
+        <button class="btn-demo" onclick="openDemoModal()" style="cursor:pointer;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 5V19L19 12L8 5Z" />
+          </svg>
+          See Demo
+        </button>
+      </div>
 
       <!-- 6 Key Features Matrix -->
-      <div class="feature-grid">
-        <!-- Main Focus -->
-        <div class="feat-card main-focus">
-          <h4>Zero-Config Plug & Play</h4>
-          <p>Deploy your intelligent agent instantly. No complex setup, coding, or technical expertise required to start closing.</p>
+      <div class="feature-bento">
+        <div class="bento-top">
+          <div class="bento-col main-col">
+            <div class="feat-card main-focus">
+              <h4>Zero-Config Plug & Play</h4>
+              <p>Deploy your intelligent agent instantly. No complex setup, coding, or technical expertise required to start closing.</p>
+            </div>
+          </div>
+          <div class="bento-col side-col">
+            <div class="feat-card">
+              <h4>Autonomous WhatsApp Closer</h4>
+              <p>24/7 intelligent sales rep handling catalog queries, inventory lookups, discount logic, and COD / bank orders.</p>
+            </div>
+            <div class="feat-card">
+              <h4>AI Receptionist &amp; Booking Closer</h4>
+              <p>Schedules appointments, discovery calls, and meetings natively in WhatsApp with smart calendar slots.</p>
+            </div>
+          </div>
         </div>
-        
-        <div class="feat-card">
-          <h4>Autonomous WhatsApp Closer</h4>
-          <p>24/7 intelligent sales rep handling catalog queries, inventory lookups, discount logic, and COD / bank orders.</p>
+        <div class="bento-mid">
+          <div class="feat-card">
+            <h4>Targeted AI Outbound Campaigns</h4>
+            <p>Broadcast high-converting proactive campaigns. AI retains full conversation memory when leads reply.</p>
+          </div>
+          <div class="feat-card">
+            <h4>Native Urdu &amp; Multilingual Engine</h4>
+            <p>Communicates fluently in conversational Roman Urdu, standard Nastaliq Urdu script, and English.</p>
+          </div>
         </div>
-        
-        <div class="feat-card">
-          <h4>AI Receptionist &amp; Booking Closer</h4>
-          <p>Schedules appointments, discovery calls, and meetings natively in WhatsApp with smart calendar slots.</p>
-        </div>
-        
-        <div class="feat-card">
-          <h4>Targeted AI Outbound Campaigns</h4>
-          <p>Broadcast high-converting proactive campaigns. AI retains full conversation memory when leads reply.</p>
-        </div>
-        
-        <div class="feat-card">
-          <h4>Native Urdu &amp; Multilingual Engine</h4>
-          <p>Communicates fluently in conversational Roman Urdu, standard Nastaliq Urdu script, and English.</p>
-        </div>
-        
-        <!-- Wide -->
-        <div class="feat-card wide">
-          <h4>Real-Time Funnel &amp; Pipeline CRM</h4>
-          <p>Tracks leads across every lifecycle stage from initial inquiry to payment confirmation and delivery.</p>
+        <div class="bento-bot">
+          <div class="feat-card wide">
+            <h4>Real-Time Funnel &amp; Pipeline CRM</h4>
+            <p>Tracks leads across every lifecycle stage from initial inquiry to payment confirmation and delivery.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -982,7 +1033,7 @@
       </form>
 
       <div style="margin-top:20px;text-align:center;font-size:12px;color:var(--text-muted)">
-        Need access? Contact your platform administrator for tenant provisioning.
+        Need access? Contact us at <a href="mailto:subhankashif696@gmail.com" style="color:var(--accent);text-decoration:none;font-weight:600;">subhankashif696@gmail.com</a> or <a href="https://wa.me/923211017677" style="color:var(--accent);text-decoration:none;font-weight:600;" target="_blank">WhatsApp (03211017677)</a>
       </div>
     </div>
 
@@ -3814,6 +3865,28 @@ function toggleTheme() {
     }
   }
 }
+</script>
+
+<!-- Demo Video Modal -->
+<div id="demo-modal" class="auth-overlay" style="display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); z-index: 10000;" onclick="closeDemoModal(event)">
+  <div style="position: relative; width: 90%; max-width: 900px; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <button onclick="closeDemoModal(event)" style="position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center;">&times;</button>
+    <video id="demo-video" controls style="width: 100%; display: block;" src="/static/demo.mp4"></video>
+  </div>
+</div>
+<script>
+  function openDemoModal() {
+    document.getElementById('demo-modal').style.display = 'flex';
+    document.getElementById('demo-video').play();
+  }
+  function closeDemoModal(e) {
+    if (e && e.target !== document.getElementById('demo-modal') && e.currentTarget !== e.target) {
+       if (e.target.tagName !== 'BUTTON') return;
+    }
+    document.getElementById('demo-modal').style.display = 'none';
+    document.getElementById('demo-video').pause();
+    document.getElementById('demo-video').currentTime = 0;
+  }
 </script>
 </body>
 </html>
