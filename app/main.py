@@ -145,11 +145,15 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+from fastapi.staticfiles import StaticFiles
+
 app.include_router(webhook_router)
 app.include_router(wa_bridge_router)
 app.include_router(analytics_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.get("/", include_in_schema=False)
