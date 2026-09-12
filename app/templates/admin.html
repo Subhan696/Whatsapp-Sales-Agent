@@ -587,44 +587,53 @@
   /* 6 Showcase Features Grid */
   .feature-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1.1fr 1fr;
+    grid-auto-rows: min-content;
     gap: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
   }
   .feat-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px;
+    border-radius: 12px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    align-items: flex-start;
-    transition: border-color .2s, box-shadow .2s;
+    gap: 6px;
+    transition: all .3s ease;
   }
   .feat-card:hover {
-    border-color: var(--border-highlight);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border-color: rgba(255,255,255,0.15);
+    background: var(--bg-card-hover);
   }
-  .feat-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
+  .feat-card.main-focus {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    background: linear-gradient(160deg, rgba(16,185,129,0.06), transparent), var(--bg-card);
+    border-color: rgba(16,185,129,0.15);
+    padding: 24px 20px;
     justify-content: center;
-    font-size: 18px;
-    flex-shrink: 0;
   }
-  .feat-icon.green  { background: rgba(16, 185, 129, 0.15); color: #34d399; }
-  .feat-icon.blue   { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
-  .feat-icon.purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
-  .feat-icon.amber  { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
-  .feat-icon.cyan   { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
-  .feat-icon.rose   { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+  .feat-card.main-focus:hover {
+    border-color: rgba(16,185,129,0.3);
+  }
+  .feat-card.main-focus h4 {
+    font-size: 16px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+  .feat-card.main-focus p {
+    font-size: 13px;
+    color: var(--text-primary);
+    opacity: 0.85;
+  }
+  .feat-card.wide {
+    grid-column: 1 / -1;
+  }
 
-  .feat-content h4 { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
-  .feat-content p { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
+  .feat-card h4 { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+  .feat-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
 
   .auth-brand-footer {
     display: flex;
@@ -900,47 +909,36 @@
 
       <!-- 6 Key Features Matrix -->
       <div class="feature-grid">
-        <div class="feat-card">
-          <div class="feat-icon green">&#129302;</div>
-          <div class="feat-content">
-            <h4>Autonomous WhatsApp Closer</h4>
-            <p>24/7 intelligent sales rep handling catalog queries, inventory lookups, discount logic, and COD / bank orders.</p>
-          </div>
+        <!-- Main Focus -->
+        <div class="feat-card main-focus">
+          <h4>Zero-Config Plug & Play</h4>
+          <p>Deploy your intelligent agent instantly. No complex setup, coding, or technical expertise required to start closing.</p>
         </div>
+        
         <div class="feat-card">
-          <div class="feat-icon blue">&#128197;</div>
-          <div class="feat-content">
-            <h4>AI Receptionist &amp; Booking Closer</h4>
-            <p>Schedules appointments, discovery calls, and meetings natively in WhatsApp with smart calendar slots.</p>
-          </div>
+          <h4>Autonomous WhatsApp Closer</h4>
+          <p>24/7 intelligent sales rep handling catalog queries, inventory lookups, discount logic, and COD / bank orders.</p>
         </div>
+        
         <div class="feat-card">
-          <div class="feat-icon purple">&#128227;</div>
-          <div class="feat-content">
-            <h4>Targeted AI Outbound Campaigns</h4>
-            <p>Broadcast high-converting proactive campaigns. AI retains full conversation memory when leads reply.</p>
-          </div>
+          <h4>AI Receptionist &amp; Booking Closer</h4>
+          <p>Schedules appointments, discovery calls, and meetings natively in WhatsApp with smart calendar slots.</p>
         </div>
+        
         <div class="feat-card">
-          <div class="feat-icon amber">&#128247;</div>
-          <div class="feat-content">
-            <h4>OCR Bank Receipt Verification</h4>
-            <p>Computer vision engine parses payment screenshots, amounts, and transaction IDs for 1-click verification.</p>
-          </div>
+          <h4>Targeted AI Outbound Campaigns</h4>
+          <p>Broadcast high-converting proactive campaigns. AI retains full conversation memory when leads reply.</p>
         </div>
+        
         <div class="feat-card">
-          <div class="feat-icon cyan">&#127760;</div>
-          <div class="feat-content">
-            <h4>Native Urdu &amp; Multilingual Engine</h4>
-            <p>Communicates fluently in conversational Roman Urdu, standard Nastaliq Urdu script, and English.</p>
-          </div>
+          <h4>Native Urdu &amp; Multilingual Engine</h4>
+          <p>Communicates fluently in conversational Roman Urdu, standard Nastaliq Urdu script, and English.</p>
         </div>
-        <div class="feat-card">
-          <div class="feat-icon rose">&#128200;</div>
-          <div class="feat-content">
-            <h4>Real-Time Funnel &amp; Pipeline CRM</h4>
-            <p>Tracks leads across every lifecycle stage from initial inquiry to payment confirmation and delivery.</p>
-          </div>
+        
+        <!-- Wide -->
+        <div class="feat-card wide">
+          <h4>Real-Time Funnel &amp; Pipeline CRM</h4>
+          <p>Tracks leads across every lifecycle stage from initial inquiry to payment confirmation and delivery.</p>
         </div>
       </div>
     </div>
