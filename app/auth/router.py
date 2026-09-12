@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.base import get_db
-from app.db.crud import create_tenant, get_tenant_by_email
+from app.db.crud import create_tenant, get_tenant_by_email, upsert_setting
 from app.dependencies import require_superadmin
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -22,6 +22,7 @@ class SignupRequest(BaseModel):
     business_name: str
     email: EmailStr
     password: str
+    outreach_enabled: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -39,9 +40,9 @@ class AuthResponse(BaseModel):
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(days=7)
+        expire = datetime.now(UTC) + timedelta(days=7)
     to_encode.update({"exp": expire})
     settings = get_settings()
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm="HS256")
@@ -77,8 +78,10 @@ async def signup(
             admin_api_key=new_admin_key,
             status="active"
         )
+        if request.outreach_enabled:
+            await upsert_setting(db, "outreach_enabled", "true", tenant_id=tenant.id)
         await db.commit()
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

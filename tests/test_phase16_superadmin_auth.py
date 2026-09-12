@@ -196,3 +196,28 @@ async def test_admin_settings_endpoint_only_needs_tenant_key(keyed_tenant, db_se
         assert r.status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_superadmin_toggle_outreach(keyed_tenant, db_session: AsyncSession):
+    """Superadmin can toggle outreach permission for any tenant."""
+    app = _client_app(db_session)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_unauth = await client.post("/admin/tenants/1/toggle-outreach")
+        assert r_unauth.status_code == 401
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"X-Superadmin-Key": SUPERADMIN_KEY},
+        ) as client:
+            r1 = await client.post("/admin/tenants/1/toggle-outreach")
+            assert r1.status_code == 200
+            assert r1.json()["outreach_enabled"] is True
+
+            r2 = await client.post("/admin/tenants/1/toggle-outreach")
+            assert r2.status_code == 200
+            assert r2.json()["outreach_enabled"] is False
+    finally:
+        app.dependency_overrides.clear()

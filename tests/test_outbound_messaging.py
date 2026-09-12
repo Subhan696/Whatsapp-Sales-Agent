@@ -311,7 +311,25 @@ async def test_admin_outbound_endpoints(db_session):
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # 1. POST /admin/outbound/preview (template)
+            # 0. Outreach is disabled by default -> 403 Forbidden
+            blocked_resp = await client.post(
+                "/admin/outbound/preview",
+                json={
+                    "mode": "template",
+                    "prompt_or_template": "Salam {name}! Welcome to {business_name}.",
+                    "sample_name": "Tariq",
+                },
+                headers=admin_headers,
+            )
+            assert blocked_resp.status_code == 403
+            assert "Outbound messaging is disabled" in blocked_resp.json()["detail"]
+
+            # Enable outreach for tenant 60
+            from app.db.crud import upsert_setting
+            await upsert_setting(db_session, "outreach_enabled", "true", tenant_id=60)
+            await db_session.commit()
+
+            # 1. POST /admin/outbound/preview (template) now succeeds
             p_resp = await client.post(
                 "/admin/outbound/preview",
                 json={

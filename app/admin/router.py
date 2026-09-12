@@ -272,6 +272,11 @@ async def put_admin_setting(
     db: AsyncSession = Depends(get_db),
     tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
+    if key == "outreach_enabled":
+        raise HTTPException(
+            status_code=403,
+            detail="Outreach permission can only be modified by platform superadmin",
+        )
     from app.db.crud import upsert_setting
     await upsert_setting(db, key, body.value, tenant_id=tenant_id)
     await _audit(db, tenant_id=tenant_id, action="update_setting", key=key, value=_redact_setting_value(key, body.value))
@@ -3874,6 +3879,15 @@ async function loadAll() {
     await loadAgentActiveSetting();
   } catch(e) { /* non-critical */ }
 
+  try {
+    const obSetting = await safeFetch('/admin/settings/outreach_enabled');
+    const isObEnabled = (obSetting.value || '').toLowerCase() === 'true';
+    const obTabBtn = document.getElementById('tab-btn-outbound');
+    if (obTabBtn) {
+      obTabBtn.style.display = isObEnabled ? '' : 'none';
+    }
+  } catch(e) { /* non-critical */ }
+
   if (errs.length) {
     showBanner('Dashboard errors: ' + errs.join(' | '));
     document.getElementById('last-updated').textContent = errs.length + ' error(s) — see banner';
@@ -4159,6 +4173,12 @@ _SUPERADMIN_HTML = """<!DOCTYPE html>
         <label>Temporary Password *</label>
         <input type="password" id="new-pass" placeholder="Set a password">
       </div>
+      <div class="fg" style="display:flex;align-items:center;padding-top:14px">
+        <label style="margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#374151">
+          <input type="checkbox" id="new-outreach" style="width:auto;accent-color:#128C7E">
+          Enable Outreach / Outbound
+        </label>
+      </div>
       <button class="create-btn" onclick="createAccount()">Create Account</button>
     </div>
   </div>
@@ -4179,12 +4199,13 @@ _SUPERADMIN_HTML = """<!DOCTYPE html>
             <th>Email</th>
             <th>WhatsApp</th>
             <th>Status</th>
+            <th>Outreach</th>
             <th>Signed Up</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="tenants-tbody">
-          <tr><td colspan="7" class="empty-msg"><div class="spinner"></div></td></tr>
+          <tr><td colspan="8" class="empty-msg"><div class="spinner"></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -4277,7 +4298,7 @@ function renderTenants(tenants) {
 
   const tbody = document.getElementById('tenants-tbody');
   if (!total) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No tenants yet. Create one above.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No tenants yet. Create one above.</td></tr>';
     return;
   }
   tbody.innerHTML = tenants.map(t => {
@@ -4288,15 +4309,19 @@ function renderTenants(tenants) {
     const toggleBtn = t.id === 1 ? '' : isActive
       ? '<button class="btn btn-yellow" onclick="setStatus(' + t.id + ', &quot;inactive&quot;)">Suspend</button>'
       : '<button class="btn btn-green" onclick="setStatus(' + t.id + ', &quot;active&quot;)">Activate</button>';
+    const outreachBtn = t.outreach_enabled
+      ? '<button class="btn btn-green" style="font-size:11px;padding:3px 8px" onclick="toggleOutreach(' + t.id + ')" title="Outreach is active. Click to turn off.">&#10003; Active</button>'
+      : '<button class="btn" style="background:#64748b;color:#fff;font-size:11px;padding:3px 8px" onclick="toggleOutreach(' + t.id + ')" title="Outreach is disabled. Click to turn on.">&#10005; Disabled</button>';
     const viewBtn   = '<button class="btn btn-indigo" onclick="viewDashboard(' + t.id + ', &quot;' + encodeURIComponent(t.name) + '&quot;)">View Dashboard</button>';
     const rotateBtn = '<button class="btn btn-amber" onclick="rotateKey(' + t.id + ')">Rotate Key</button>';
     const deleteBtn = t.id === 1 ? '' : '<button class="btn btn-red" onclick="deleteTenant(' + t.id + ')">Delete</button>';
     return '<tr>'
       + '<td class="mono">' + t.id + '</td>'
       + '<td style="font-weight:700">' + t.name + '</td>'
-      + '<td class="mono">' + (t.email || '—') + '</td>'
-      + '<td class="mono">' + (t.whatsapp_number || '—') + '</td>'
+      + '<td class="mono">' + (t.email || '&mdash;') + '</td>'
+      + '<td class="mono">' + (t.whatsapp_number || '&mdash;') + '</td>'
       + '<td>' + badge + '</td>'
+      + '<td>' + outreachBtn + '</td>'
       + '<td style="color:#6b7280;font-size:12px;white-space:nowrap">' + fmtDate(t.created_at) + '</td>'
       + '<td><div class="actions">' + viewBtn + rotateBtn + toggleBtn + deleteBtn + '</div></td>'
       + '</tr>';
@@ -4326,16 +4351,17 @@ async function setStatus(id, status) {
 }
 
 async function rotateKey(id) {
-  if (!confirm('Rotate API key for tenant #' + id + '?\\nThe old key stops working immediately.')) return;
+  if (!confirm('Rotate admin API key for tenant #' + id + '? The old key will immediately stop working.')) return;
   const r = await saFetch('/admin/tenants/' + id + '/rotate-key', {method: 'POST'});
   const data = await r.json();
   if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
-  showToast('Key rotated — copy it from the dialog');
-  setTimeout(() => { prompt('New Admin API Key for tenant #' + id + ' (copy this):', data.admin_api_key); }, 100);
+  prompt('New Admin API Key for tenant #' + id + ' (copy now &mdash; shown only once):', data.admin_api_key);
+  showToast('API key rotated');
+  loadTenants();
 }
 
 async function deleteTenant(id) {
-  if (!confirm('Permanently delete tenant #' + id + '?\\n\\nOnly tenants with NO customers or orders can be deleted.\\nUse Suspend instead for tenants with data.')) return;
+  if (!confirm('Permanently delete tenant #' + id + '?\n\nOnly tenants with NO customers or orders can be deleted.\nUse Suspend instead for tenants with data.')) return;
   const r = await saFetch('/admin/tenants/' + id, {method: 'DELETE'});
   const data = await r.json().catch(() => ({}));
   if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
@@ -4343,10 +4369,20 @@ async function deleteTenant(id) {
   loadTenants();
 }
 
+async function toggleOutreach(id) {
+  const r = await saFetch('/admin/tenants/' + id + '/toggle-outreach', {method: 'POST'});
+  if (!r) return;
+  const data = await r.json();
+  if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
+  showToast('Outreach ' + (data.outreach_enabled ? 'enabled' : 'disabled') + ' for tenant #' + id);
+  loadTenants();
+}
+
 async function createAccount() {
   const name  = document.getElementById('new-name').value.trim();
   const email = document.getElementById('new-email').value.trim();
   const pass  = document.getElementById('new-pass').value;
+  const outreach = (document.getElementById('new-outreach') || {}).checked || false;
   if (!name || !email || !pass) { showToast('All three fields are required', true); return; }
   const r = await fetch('/auth/signup', {
     method: 'POST',
@@ -4354,14 +4390,16 @@ async function createAccount() {
       'Content-Type': 'application/json',
       'X-Superadmin-Key': getSaKey()
     },
-    body: JSON.stringify({business_name: name, email, password: pass})
+    body: JSON.stringify({business_name: name, email, password: pass, outreach_enabled: outreach})
   });
   const data = await r.json();
   if (!r.ok) { showToast('Error: ' + (data.detail || r.status), true); return; }
   document.getElementById('new-name').value = '';
   document.getElementById('new-email').value = '';
   document.getElementById('new-pass').value = '';
-  showToast('Account created for ' + email);
+  const obCb = document.getElementById('new-outreach');
+  if (obCb) obCb.checked = false;
+  showToast('Account created for ' + email + (outreach ? ' (Outreach ON)' : ''));
   if (data.admin_api_key) {
     setTimeout(() => { prompt('Admin API Key for ' + email + ' (share with tenant for webhook use):', data.admin_api_key); }, 100);
   }
@@ -4827,6 +4865,13 @@ async def preview_outbound_message_endpoint(
     tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Generate live preview for an outbound message (template or AI-prompt)."""
+    from app.db.crud import get_setting
+    if (await get_setting(db, "outreach_enabled", "false", tenant_id=tenant_id)).lower() != "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Outbound messaging is disabled for your account. Please contact your platform administrator to enable outreach.",
+        )
+
     from app.messaging.outbound import generate_outbound_message_content
 
     if not body.prompt_or_template.strip():
@@ -4849,6 +4894,13 @@ async def send_outbound_broadcast_endpoint(
     tenant_id: int = Depends(get_authenticated_tenant_id),
 ) -> dict:
     """Send proactive outbound messages to multiple recipients with full conversation context memory."""
+    from app.db.crud import get_setting
+    if (await get_setting(db, "outreach_enabled", "false", tenant_id=tenant_id)).lower() != "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Outbound messaging is disabled for your account. Please contact your platform administrator to enable outreach.",
+        )
+
     from app.messaging.outbound import execute_outbound_broadcast, parse_recipients_input
 
     recipients = parse_recipients_input(body.recipients)
@@ -4918,20 +4970,41 @@ async def list_outbound_campaigns_endpoint(
 async def list_admin_tenants(
     db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
 ) -> list[dict]:
-    from app.db.crud import list_tenants
+    from app.db.crud import get_setting, list_tenants
     tenants = await list_tenants(db)
-    return [
-        {
+    out = []
+    for t in tenants:
+        outreach_val = await get_setting(db, "outreach_enabled", "false", tenant_id=t.id)
+        out.append({
             "id": t.id,
             "name": t.name,
             "email": t.email,
             "whatsapp_number": t.whatsapp_number,
             "phone_number_id": t.phone_number_id,
             "status": t.status,
+            "outreach_enabled": outreach_val.lower() == "true",
             "created_at": t.created_at.isoformat() if t.created_at else None,
-        }
-        for t in tenants
-    ]
+        })
+    return out
+
+
+@router.post("/admin/tenants/{tenant_id}/toggle-outreach")
+async def toggle_tenant_outreach(
+    tenant_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_superadmin),
+) -> dict:
+    """Superadmin toggles whether a tenant is permitted to send outbound campaigns."""
+    from app.db.crud import get_setting, get_tenant_by_id, upsert_setting
+    tenant = await get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    current = await get_setting(db, "outreach_enabled", "false", tenant_id=tenant_id)
+    new_state = "false" if current.lower() == "true" else "true"
+    await upsert_setting(db, "outreach_enabled", new_state, tenant_id=tenant_id)
+    await _audit(db, tenant_id=tenant_id, action="toggle_outreach", enabled=(new_state == "true"))
+    await db.commit()
+    return {"tenant_id": tenant_id, "outreach_enabled": (new_state == "true")}
 
 
 @router.post("/admin/tenants", status_code=201)
