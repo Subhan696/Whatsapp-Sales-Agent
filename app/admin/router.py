@@ -1112,17 +1112,36 @@ async def list_outbound_campaigns_endpoint(
 async def list_admin_tenants(
     db: AsyncSession = Depends(get_db), _: None = Depends(require_superadmin)
 ) -> list[dict]:
+    import httpx
+    from app.config import get_settings
     from app.db.crud import get_setting, list_tenants
+    
+    settings = get_settings()
     tenants = await list_tenants(db)
+    
+    bridge_sessions = {}
+    if settings.WA_BRIDGE_URL:
+        headers = {"X-Bridge-Token": settings.WA_BRIDGE_TOKEN} if settings.WA_BRIDGE_TOKEN else {}
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(f"{settings.WA_BRIDGE_URL}/health", headers=headers)
+                if resp.status_code == 200:
+                    bridge_sessions = resp.json().get("sessions", {})
+        except httpx.HTTPError:
+            pass
+
     out = []
     for t in tenants:
         outreach_val = await get_setting(db, "outreach_enabled", "false", tenant_id=t.id)
+        wa_status = bridge_sessions.get(str(t.id), "not_connected")
+        
         out.append({
             "id": t.id,
             "name": t.name,
             "email": t.email,
             "whatsapp_number": t.whatsapp_number,
             "phone_number_id": t.phone_number_id,
+            "wa_status": wa_status,
             "status": t.status,
             "outreach_enabled": outreach_val.lower() == "true",
             "created_at": t.created_at.isoformat() if t.created_at else None,

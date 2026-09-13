@@ -491,6 +491,12 @@
       border: 1px solid rgba(148, 163, 184, 0.2);
     }
 
+    .b-amber {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+
     .actions {
       display: flex;
       gap: 8px;
@@ -584,6 +590,26 @@
 
       .topbar {
         padding: 0 16px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .login-card {
+        padding: 32px 24px;
+        width: 100%;
+        margin: 0 8px;
+      }
+
+      .stats-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .section {
+        padding: 20px 16px;
+      }
+      
+      .create-btn {
+        width: 100%;
       }
     }
 
@@ -803,9 +829,18 @@
           ? '<span class="badge b-green">&bull; Active</span>'
           : '<span class="badge b-gray">&bull; ' + t.status + '</span>';
 
-        const waConnected = t.phone_number_id || t.whatsapp_number
-          ? '<span class="badge b-green">&bull; Connected</span>'
-          : '<span class="badge b-amber">&bull; Disconnected</span>';
+        let waConnected = '';
+        if (t.wa_status === 'ready') {
+          waConnected = '<span class="badge b-green">&bull; Connected</span>';
+        } else if (t.wa_status === 'qr_pending') {
+          waConnected = '<span class="badge b-amber">&bull; Pending Scan</span>';
+        } else if (t.wa_status === 'starting') {
+          waConnected = '<span class="badge b-gray">&bull; Starting…</span>';
+        } else if (t.phone_number_id || t.whatsapp_number) {
+          waConnected = '<span class="badge b-green">&bull; Cloud API</span>';
+        } else {
+          waConnected = '<span class="badge b-amber">&bull; Disconnected</span>';
+        }
 
         const toggleBtn = t.id === 1 ? '' : isActive
           ? '<button class="btn btn-yellow" onclick="setStatus(' + t.id + ', &quot;inactive&quot;)">Suspend</button>'
