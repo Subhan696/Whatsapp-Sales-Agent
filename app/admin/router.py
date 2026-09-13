@@ -1126,6 +1126,7 @@ async def list_admin_tenants(
             "status": t.status,
             "outreach_enabled": outreach_val.lower() == "true",
             "created_at": t.created_at.isoformat() if t.created_at else None,
+            "last_login_at": t.last_login_at.isoformat() if getattr(t, "last_login_at", None) else None,
         })
     return out
 

@@ -114,6 +114,9 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Incorrect email or password",
         )
 
+    tenant.last_login_at = datetime.now(UTC)
+    await db.commit()
+
     access_token = create_access_token(data={"sub": str(tenant.id)})
 
     return AuthResponse(
