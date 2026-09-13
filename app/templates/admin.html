@@ -11,44 +11,41 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
   <style>
     :root {
-      --bg-base: #14171a;
-      --bg-surface: #1a1e22;
-      --bg-card: #1f2327;
-      --bg-card-hover: #262b30;
+      --bg-base: #090e17;
+      --bg-surface: #0f172a;
+      --bg-card: #111827;
+      --bg-card-hover: #172033;
       --border: rgba(255, 255, 255, 0.08);
-      --border-highlight: rgba(37, 211, 102, 0.35);
-      --accent: #25D366;
-      --accent-glow: rgba(37, 211, 102, 0.16);
-      --accent-teal: #2E9E76;
-      --accent-indigo: #7C8CF0;
-      --accent-amber: #E7A33E;
-      --accent-rose: #E8607A;
-      --accent-blue: #4E9BE0;
-      --text-primary: #EBEDEA;
-      --text-secondary: #97A09E;
-      --text-muted: #656E6C;
-      --font: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
-      --mono: 'IBM Plex Mono', monospace;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
+      --border-highlight: rgba(16, 185, 129, 0.3);
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.25);
+      --accent-teal: #06b6d4;
+      --accent-indigo: #6366f1;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-blue: #3b82f6;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
     }
 
     [data-theme="light"] {
-      --bg-base: #f0f1ed;
-      --bg-surface: #f8f8f5;
+      --bg-base: #f1f5f9;
+      --bg-surface: #f8fafc;
       --bg-card: #ffffff;
-      --bg-card-hover: #ececE6;
-      --border: rgba(20, 25, 22, 0.10);
-      --border-highlight: rgba(18, 140, 74, 0.35);
-      --text-primary: #16191a;
-      --text-secondary: #565f5c;
-      --text-muted: #7c8583;
-      --accent-glow: rgba(18, 140, 74, 0.12);
+      --bg-card-hover: #e2e8f0;
+      --border: rgba(0, 0, 0, 0.08);
+      --border-highlight: rgba(16, 185, 129, 0.3);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-glow: rgba(16, 185, 129, 0.15);
     }
 
     *,
@@ -66,17 +63,6 @@
       min-height: 100vh;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
-      font-size: 14px;
-    }
-
-    ::selection {
-      background: var(--accent);
-      color: #04140b;
-    }
-
-    :focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
 
     /* ---- Keyframes ---- */
@@ -93,12 +79,24 @@
     @keyframes fadeInUp {
       from {
         opacity: 0;
-        transform: translateY(6px)
+        transform: translateY(14px)
       }
 
       to {
         opacity: 1;
         transform: none
+      }
+    }
+
+    @keyframes pulseGlow {
+
+      0%,
+      100% {
+        box-shadow: 0 0 15px var(--accent-glow)
+      }
+
+      50% {
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.5)
       }
     }
 
@@ -108,229 +106,255 @@
       }
     }
 
+    @keyframes float {
+
+      0%,
+      100% {
+        transform: translateY(0) scale(1);
+        opacity: .12
+      }
+
+      50% {
+        transform: translateY(-20px) scale(1.04);
+        opacity: .25
+      }
+    }
+
     /* ---- Topbar ---- */
     .topbar {
-      background: var(--bg-surface);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
-      padding: 0 24px;
+      padding: 0 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      height: 60px;
+      height: 68px;
       position: sticky;
       top: 0;
       z-index: 100;
-      gap: 12px;
-      flex-wrap: wrap;
     }
 
     .topbar-left {
       display: flex;
       align-items: center;
-      gap: 12px;
-      min-width: 0;
+      gap: 14px;
     }
 
     .topbar h1 {
-      font-size: 15px;
+      font-size: 17px;
       font-weight: 700;
-      letter-spacing: -0.1px;
+      letter-spacing: -0.2px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      white-space: nowrap;
-    }
-
-    .topbar h1 span {
-      color: var(--text-secondary);
-      font-weight: 500;
+      gap: 10px;
     }
 
     .wa-dot {
-      width: 30px;
-      height: 30px;
-      background: var(--accent);
-      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      border-radius: 9px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 15px;
+      font-size: 16px;
+      box-shadow: 0 0 16px var(--accent-glow);
       flex-shrink: 0;
     }
 
     .brand-badge {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      padding: 3px 8px;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-      letter-spacing: .3px;
-      white-space: nowrap;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .refresh-row {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 12px;
+      gap: 12px;
+      font-size: 13px;
       color: var(--text-secondary);
-      flex-wrap: wrap;
     }
 
     .btn-refresh {
-      background: transparent;
+      background: rgba(255, 255, 255, 0.05);
       color: var(--text-primary);
       border: 1px solid var(--border);
-      padding: 6px 13px;
-      border-radius: var(--radius-sm);
+      padding: 7px 14px;
+      border-radius: 9px;
       cursor: pointer;
       font-size: 12px;
       font-weight: 600;
-      transition: border-color .15s, color .15s;
+      transition: all .2s;
       display: inline-flex;
       align-items: center;
       gap: 6px;
     }
 
     .btn-refresh:hover {
-      border-color: var(--border-highlight);
-      color: var(--accent);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
     }
 
     .auth-logout-btn {
       background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-secondary);
-      padding: 6px 13px;
-      border-radius: var(--radius-sm);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      padding: 6px 14px;
+      border-radius: 8px;
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: all .15s;
+      transition: all .2s;
     }
 
     .auth-logout-btn:hover {
-      background: rgba(232, 96, 122, 0.1);
-      border-color: rgba(232, 96, 122, 0.4);
-      color: var(--accent-rose);
+      background: rgba(239, 68, 68, 0.1);
+      border-color: #ef4444;
     }
 
     .topbar-user {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-secondary);
-      background: transparent;
+      background: rgba(255, 255, 255, 0.04);
       padding: 4px 10px;
-      border-radius: var(--radius-sm);
+      border-radius: 8px;
       border: 1px solid var(--border);
       font-weight: 500;
-      white-space: nowrap;
     }
 
     /* ---- KPI Cards ---- */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      padding: 20px 24px 0;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 16px;
+      padding: 24px 28px 0;
     }
 
     .kpi-card {
       background: var(--bg-card);
-      border-radius: var(--radius-md);
-      padding: 16px 18px;
+      border-radius: 16px;
+      padding: 20px 22px;
       border: 1px solid var(--border);
       position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      transition: border-color .15s;
+      overflow: hidden;
+      transition: transform .2s, border-color .2s, box-shadow .2s;
+      animation: fadeInUp .4s ease backwards;
     }
 
     .kpi-card:hover {
-      border-color: var(--border-highlight);
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
     }
 
     .kpi-icon {
-      font-size: 15px;
-      margin-bottom: 10px;
+      font-size: 22px;
+      margin-bottom: 12px;
       display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      background: var(--bg-card-hover);
-      border-radius: var(--radius-sm);
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      border: 1px solid var(--border);
     }
 
     .kpi-card .label {
       font-size: 11px;
       color: var(--text-muted);
-      letter-spacing: .2px;
-      margin-bottom: 4px;
-      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      margin-bottom: 6px;
+      font-weight: 700;
     }
 
     .kpi-card .value {
-      font-size: 22px;
-      font-weight: 700;
+      font-size: 26px;
+      font-weight: 800;
       color: var(--text-primary);
       line-height: 1.15;
       font-family: var(--mono);
-      letter-spacing: -0.3px;
+      letter-spacing: -0.5px;
     }
 
     .kpi-card .sub {
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-secondary);
-      margin-top: 4px;
+      margin-top: 6px;
     }
 
-    .kpi-card.purple .kpi-icon {
-      color: var(--accent-indigo);
+    .kpi-card.purple {
+      border-top: 3px solid #10b981;
     }
 
-    .kpi-card.green .kpi-icon,
+    .kpi-card.green {
+      border-top: 3px solid #34d399;
+    }
+
     .kpi-card.green .value {
-      color: var(--accent);
+      color: #34d399;
     }
 
-    .kpi-card.amber .kpi-icon,
+    .kpi-card.amber {
+      border-top: 3px solid #f59e0b;
+    }
+
     .kpi-card.amber .value {
-      color: var(--accent-amber);
+      color: #fbbf24;
     }
 
-    .kpi-card.blue .kpi-icon,
+    .kpi-card.blue {
+      border-top: 3px solid #3b82f6;
+    }
+
     .kpi-card.blue .value {
-      color: var(--accent-blue);
+      color: #60a5fa;
     }
 
-    .kpi-card.red .kpi-icon,
+    .kpi-card.red {
+      border-top: 3px solid #ef4444;
+    }
+
     .kpi-card.red .value {
-      color: var(--accent-rose);
+      color: #f87171;
     }
 
-    .kpi-card.indigo .kpi-icon,
+    .kpi-card.indigo {
+      border-top: 3px solid #818cf8;
+    }
+
     .kpi-card.indigo .value {
-      color: var(--accent-indigo);
+      color: #a5b4fc;
     }
 
-    .kpi-card.teal .kpi-icon,
+    .kpi-card.teal {
+      border-top: 3px solid #14b8a6;
+    }
+
     .kpi-card.teal .value {
-      color: var(--accent-teal);
+      color: #2dd4bf;
     }
 
-    .kpi-card.rose .kpi-icon,
+    .kpi-card.rose {
+      border-top: 3px solid #f43f5e;
+    }
+
     .kpi-card.rose .value {
-      color: var(--accent-rose);
+      color: #fb7185;
     }
 
     /* ---- Tabs ---- */
     .tabs {
       display: flex;
-      gap: 4px;
-      padding: 20px 24px 0;
+      gap: 6px;
+      padding: 24px 28px 0;
       overflow-x: auto;
       scrollbar-width: none;
       border-bottom: 1px solid var(--border);
@@ -341,55 +365,71 @@
     }
 
     .tab {
-      padding: 10px 14px;
-      border-radius: 0;
+      padding: 10px 18px;
+      border-radius: 10px 10px 0 0;
       cursor: pointer;
       font-weight: 600;
-      font-size: 12.5px;
+      font-size: 13px;
       color: var(--text-secondary);
       background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      transition: color .15s, border-color .15s;
+      border: 1px solid transparent;
+      border-bottom: none;
+      transition: all .2s;
       white-space: nowrap;
       position: relative;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: -1px;
     }
 
     .tab:hover:not(.active) {
       color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .tab.active {
+      background: var(--bg-surface);
       color: var(--accent);
-      border-bottom-color: var(--accent);
+      border-color: var(--border);
+      border-bottom: 1px solid var(--bg-surface);
+      margin-bottom: -1px;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 2px 2px 0 0;
     }
 
     /* ---- Panels ---- */
     .panel {
       background: var(--bg-surface);
-      margin: 0 24px 28px;
-      border-radius: var(--radius-md);
+      margin: 0 28px 32px;
+      border-radius: 0 16px 16px 16px;
       border: 1px solid var(--border);
+      border-top: none;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
       overflow: hidden;
-      animation: fadeIn .2s ease;
+      animation: fadeIn .3s ease;
     }
 
     .panel-header {
-      padding: 16px 20px;
+      padding: 18px 24px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
+      background: rgba(255, 255, 255, 0.02);
     }
 
     .panel-header h2 {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 700;
       color: var(--text-primary);
       display: flex;
@@ -398,19 +438,18 @@
     }
 
     .panel-header .count {
-      background: var(--bg-card-hover);
-      color: var(--text-secondary);
-      border: 1px solid var(--border);
-      padding: 2px 9px;
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 3px 10px;
       border-radius: 20px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
     }
 
     /* ---- Tables ---- */
     .table-wrap {
       overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
     }
 
     table {
@@ -421,18 +460,19 @@
     }
 
     th {
-      background: transparent;
+      background: rgba(255, 255, 255, 0.02);
       color: var(--text-muted);
       font-weight: 700;
-      font-size: 10.5px;
-      letter-spacing: .4px;
-      padding: 11px 16px;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: .6px;
+      padding: 13px 18px;
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
 
     td {
-      padding: 12px 16px;
+      padding: 14px 18px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
       color: var(--text-primary);
@@ -443,7 +483,7 @@
     }
 
     tr:hover td {
-      background: rgba(255, 255, 255, 0.015);
+      background: rgba(255, 255, 255, 0.02);
     }
 
     .mono {
@@ -469,51 +509,59 @@
     .badge {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       padding: 3px 9px;
-      border-radius: var(--radius-sm);
+      border-radius: 8px;
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 700;
       white-space: nowrap;
+      border: 1px solid transparent;
     }
 
     .b-gray {
-      background: rgba(151, 160, 158, 0.14);
-      color: #b7bebc;
+      background: rgba(148, 163, 184, 0.12);
+      color: #cbd5e1;
+      border-color: rgba(148, 163, 184, 0.2);
     }
 
     .b-amber {
-      background: rgba(231, 163, 62, 0.14);
-      color: #e7a33e;
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.25);
     }
 
     .b-blue {
-      background: rgba(78, 155, 224, 0.14);
-      color: #6cb0ea;
+      background: rgba(59, 130, 246, 0.12);
+      color: #60a5fa;
+      border-color: rgba(59, 130, 246, 0.25);
     }
 
     .b-green {
-      background: rgba(37, 211, 102, 0.14);
-      color: #3fdb79;
+      background: rgba(16, 185, 129, 0.12);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.25);
     }
 
     .b-red {
-      background: rgba(232, 96, 122, 0.14);
-      color: #ee8298;
+      background: rgba(239, 68, 68, 0.12);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.25);
     }
 
     .b-purple {
-      background: rgba(124, 140, 240, 0.14);
-      color: #9aa6f4;
+      background: rgba(168, 85, 247, 0.12);
+      color: #c084fc;
+      border-color: rgba(168, 85, 247, 0.25);
     }
 
     /* ---- Filters ---- */
     .filter-bar {
-      padding: 12px 20px;
+      padding: 14px 24px;
       border-bottom: 1px solid var(--border);
       display: flex;
-      gap: 8px;
+      gap: 10px;
       flex-wrap: wrap;
+      background: rgba(255, 255, 255, 0.01);
     }
 
     .filter-bar select,
@@ -527,11 +575,11 @@
       background: var(--bg-card);
       border: 1px solid var(--border);
       color: var(--text-primary);
-      border-radius: var(--radius-sm);
+      border-radius: 9px;
       padding: 8px 12px;
       font-size: 13px;
       font-family: var(--font);
-      transition: border-color .15s;
+      transition: all .2s;
     }
 
     .filter-bar select:focus,
@@ -545,81 +593,85 @@
 
     /* ---- Funnel ---- */
     .funnel-wrap {
-      padding: 24px;
+      padding: 28px;
     }
 
     .funnel-stage {
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
 
     .funnel-stage .f-label {
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 600;
-      margin-bottom: 7px;
+      margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
     }
 
     .funnel-stage .f-bar-bg {
-      background: var(--bg-card);
-      border-radius: var(--radius-sm);
-      height: 26px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      height: 28px;
       overflow: hidden;
       border: 1px solid var(--border);
     }
 
     .funnel-stage .f-bar {
       height: 100%;
-      border-radius: 0;
-      transition: width .5s ease;
+      border-radius: 8px;
+      transition: width .8s cubic-bezier(.4, 0, .2, 1);
       display: flex;
       align-items: center;
       padding-left: 12px;
-      color: #04140b;
-      font-size: 11.5px;
+      color: #fff;
+      font-size: 12px;
       font-weight: 700;
       font-family: var(--mono);
     }
 
     .f-lead {
-      background: #656e6c;
-      color: #fff;
+      background: linear-gradient(90deg, #64748b, #94a3b8);
     }
 
     .f-int {
-      background: var(--accent-blue);
-      color: #fff;
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
     }
 
     .f-await {
-      background: var(--accent-amber);
+      background: linear-gradient(90deg, #d97706, #f59e0b);
     }
 
     .f-won {
-      background: var(--accent);
+      background: linear-gradient(90deg, #059669, #10b981);
     }
 
     /* ---- Analytics Tab ---- */
     .analytics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 14px;
-      padding: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      padding: 24px;
     }
 
     .analytics-card {
       background: var(--bg-card);
-      border-radius: var(--radius-md);
-      padding: 20px;
+      border-radius: 14px;
+      padding: 22px;
       border: 1px solid var(--border);
+      transition: border-color .2s;
+    }
+
+    .analytics-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
     }
 
     .analytics-card h3 {
-      font-size: 11.5px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--text-secondary);
-      letter-spacing: .3px;
-      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: 18px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -649,27 +701,26 @@
 
     .chart-bg {
       flex: 1;
-      height: 18px;
-      background: var(--bg-card-hover);
-      border-radius: var(--radius-sm);
+      height: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
       overflow: hidden;
     }
 
     .chart-fill {
       height: 100%;
-      border-radius: var(--radius-sm);
+      border-radius: 6px;
       min-width: 3px;
       display: flex;
       align-items: center;
       padding-left: 7px;
-      transition: width .4s ease;
-      background: var(--accent);
+      transition: width .5s ease;
     }
 
     .chart-fill span {
       font-size: 10px;
       font-weight: 700;
-      color: #04140b;
+      color: #fff;
       white-space: nowrap;
       font-family: var(--mono);
     }
@@ -687,9 +738,9 @@
     .daybars {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 6px;
+      gap: 8px;
       align-items: end;
-      height: 90px;
+      height: 95px;
       margin-bottom: 8px;
     }
 
@@ -702,9 +753,9 @@
 
     .daybar-fill {
       width: 100%;
-      border-radius: 3px 3px 0 0;
-      background: var(--accent);
-      transition: height .4s ease;
+      border-radius: 6px 6px 0 0;
+      background: linear-gradient(180deg, #10b981, #047857);
+      transition: height .5s cubic-bezier(.4, 0, .2, 1);
       min-height: 4px;
     }
 
@@ -725,29 +776,29 @@
 
     .stat-split {
       display: flex;
-      gap: 10px;
+      gap: 14px;
       flex-wrap: wrap;
     }
 
     .stat-block {
       flex: 1;
-      min-width: 100px;
-      padding: 12px;
-      background: var(--bg-card-hover);
+      min-width: 110px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.02);
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
+      border-radius: 10px;
       text-align: center;
     }
 
     .stat-block .s-val {
-      font-size: 18px;
-      font-weight: 700;
+      font-size: 20px;
+      font-weight: 800;
       color: var(--text-primary);
       font-family: var(--mono);
     }
 
     .stat-block .s-lbl {
-      font-size: 10.5px;
+      font-size: 11px;
       color: var(--text-muted);
       margin-top: 3px;
     }
@@ -756,7 +807,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 0;
+      padding: 9px 0;
       border-bottom: 1px solid var(--border);
       font-size: 13px;
     }
@@ -776,7 +827,7 @@
       font-family: var(--mono);
     }
 
-    /* ---- Auth Overlay & Feature Showcase ---- */
+    /* ---- Modern Auth Overlay & Feature Showcase ---- */
     .auth-overlay {
       position: fixed;
       inset: 0;
@@ -789,16 +840,15 @@
     }
 
     .auth-brand {
-      flex: 0 0 46%;
+      flex: 0 0 48%;
       background: var(--bg-surface);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 32px;
+      padding: 24px 32px;
       color: var(--text-primary);
       position: relative;
-      overflow-y: auto;
     }
 
     .auth-brand-inner {
@@ -809,57 +859,61 @@
     .auth-logo-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      background: transparent;
-      border: 1px solid var(--border);
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-size: 11.5px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 20px;
+      gap: 10px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 6px 14px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 16px;
     }
 
     .auth-brand h2 {
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      line-height: 1.25;
-      margin-bottom: 10px;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      line-height: 1.2;
+      margin-bottom: 8px;
     }
 
     .auth-brand h2 span {
-      color: var(--accent);
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .auth-brand p.tagline {
       font-size: 13.5px;
       color: var(--text-secondary);
-      line-height: 1.55;
-      margin-bottom: 20px;
+      line-height: 1.5;
+      margin-bottom: 16px;
       max-width: 95%;
     }
 
     .btn-demo-secondary {
       width: 100%;
-      padding: 12px;
-      background: transparent;
+      padding: 13px;
+      background: rgba(255, 255, 255, 0.05);
       color: var(--text-primary);
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      font-size: 13.5px;
-      font-weight: 600;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
       cursor: pointer;
-      margin-top: 10px;
+      margin-top: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: border-color .15s, color .15s;
+      transition: all .2s;
     }
 
     .btn-demo-secondary:hover {
-      border-color: var(--border-highlight);
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.4);
       color: var(--accent);
     }
 
@@ -867,32 +921,43 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 7px 13px;
-      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      border-radius: 8px;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       text-decoration: none;
-      transition: border-color .15s;
+      transition: all .2s;
       border: 1px solid var(--border);
-      color: var(--text-secondary);
+    }
+
+    .contact-btn.email-btn {
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+      border-color: rgba(59, 130, 246, 0.3);
     }
 
     .contact-btn.email-btn:hover {
-      border-color: rgba(78, 155, 224, 0.5);
-      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.2);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    .contact-btn.wa-btn {
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.3);
     }
 
     .contact-btn.wa-btn:hover {
-      border-color: var(--border-highlight);
-      color: var(--accent);
+      background: rgba(16, 185, 129, 0.2);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
     }
 
-    /* Feature Grid */
+    /* 6 Showcase Features Grid */
     .feature-bento {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
 
     .bento-top,
@@ -924,43 +989,53 @@
     .feat-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
+      border-radius: 12px;
       padding: 12px 14px;
       display: flex;
       flex-direction: column;
       gap: 4px;
+      transition: all .3s ease;
       height: 100%;
     }
 
+    .feat-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      background: var(--bg-card-hover);
+    }
+
     .feat-card.main-focus {
-      background: var(--bg-card);
-      border-color: var(--border-highlight);
-      padding: 16px;
+      background: linear-gradient(160deg, rgba(16, 185, 129, 0.06), transparent), var(--bg-card);
+      border-color: rgba(16, 185, 129, 0.15);
+      padding: 18px 16px;
       justify-content: center;
     }
 
+    .feat-card.main-focus:hover {
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
     .feat-card.main-focus h4 {
-      font-size: 15px;
+      font-size: 16px;
       color: var(--accent);
       margin-bottom: 6px;
-      letter-spacing: -0.2px;
+      letter-spacing: -0.3px;
     }
 
     .feat-card.main-focus p {
-      font-size: 12.5px;
+      font-size: 13px;
       color: var(--text-primary);
       opacity: 0.85;
     }
 
     .feat-card h4 {
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 700;
       color: var(--text-primary);
       margin-bottom: 2px;
     }
 
     .feat-card p {
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-secondary);
       line-height: 1.45;
     }
@@ -969,12 +1044,11 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-muted);
       border-top: 1px solid var(--border);
-      padding-top: 18px;
+      padding-top: 20px;
       margin-top: 16px;
-      flex-wrap: wrap;
     }
 
     /* Right Side Auth Form */
@@ -987,44 +1061,44 @@
       align-items: center;
       padding: 32px;
       position: relative;
-      overflow-y: auto;
     }
 
     .auth-card-inner {
-      width: 420px;
+      width: 440px;
       max-width: 100%;
       background: var(--bg-surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 36px;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
     }
 
     .theme-toggle-btn {
       position: absolute;
       top: 24px;
       right: 24px;
-      background: transparent;
+      background: var(--bg-surface);
       border: 1px solid var(--border);
-      color: var(--text-secondary);
-      padding: 7px 12px;
-      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      transition: border-color .15s;
+      transition: all 0.2s;
       display: flex;
       align-items: center;
       gap: 6px;
     }
 
     .theme-toggle-btn:hover {
-      border-color: var(--border-highlight);
+      background: var(--bg-card-hover);
     }
 
     .auth-card-inner h3 {
-      font-size: 21px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
       color: var(--text-primary);
       margin-bottom: 6px;
     }
@@ -1032,25 +1106,27 @@
     .auth-subtitle {
       font-size: 13px;
       color: var(--text-secondary);
-      margin-bottom: 26px;
+      margin-bottom: 28px;
     }
 
     .auth-field {
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
 
     .auth-field label {
       display: block;
-      font-size: 11.5px;
-      font-weight: 600;
+      font-size: 12px;
+      font-weight: 700;
       color: var(--text-secondary);
       margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .auth-field input {
       width: 100%;
-      padding: 11px 14px;
-      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      border-radius: 10px;
       font-size: 14px;
     }
 
@@ -1076,20 +1152,22 @@
 
     .auth-submit {
       width: 100%;
-      padding: 12px;
-      background: var(--accent);
-      color: #04140b;
+      padding: 13px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
       border: none;
-      border-radius: var(--radius-sm);
+      border-radius: 10px;
       font-size: 14px;
       font-weight: 700;
       cursor: pointer;
-      margin-top: 6px;
-      transition: filter .15s;
+      margin-top: 8px;
+      box-shadow: 0 4px 16px var(--accent-glow);
+      transition: all .2s;
     }
 
     .auth-submit:hover {
-      filter: brightness(1.08);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+      transform: translateY(-1px);
     }
 
     .auth-submit:disabled {
@@ -1098,13 +1176,13 @@
     }
 
     .auth-error {
-      color: var(--accent-rose);
+      color: #f87171;
       font-size: 13px;
       margin-bottom: 16px;
       padding: 10px 14px;
-      background: rgba(232, 96, 122, 0.1);
-      border: 1px solid rgba(232, 96, 122, 0.25);
-      border-radius: var(--radius-sm);
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 8px;
       display: none;
     }
 
@@ -1114,12 +1192,12 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
-      width: 420px;
+      width: 440px;
       max-width: 100%;
-      background: var(--bg-surface);
+      background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 36px;
+      border-radius: 20px;
+      padding: 40px;
     }
 
     .auth-apikey-panel.visible {
@@ -1127,7 +1205,7 @@
     }
 
     .apikey-icon {
-      font-size: 36px;
+      font-size: 42px;
       margin-bottom: 14px;
     }
 
@@ -1135,9 +1213,9 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-highlight);
-      border-radius: var(--radius-sm);
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 10px;
       padding: 12px 14px;
       margin: 20px 0;
       width: 100%;
@@ -1154,9 +1232,9 @@
 
     .apikey-copy-btn {
       background: var(--accent);
-      color: #04140b;
+      color: #042f2e;
       border: none;
-      border-radius: var(--radius-sm);
+      border-radius: 6px;
       padding: 6px 12px;
       font-size: 12px;
       font-weight: 700;
@@ -1165,9 +1243,9 @@
 
     .apikey-done-btn {
       background: var(--accent);
-      color: #04140b;
+      color: #042f2e;
       border: none;
-      border-radius: var(--radius-sm);
+      border-radius: 10px;
       padding: 12px 24px;
       font-size: 13px;
       font-weight: 700;
@@ -1178,15 +1256,15 @@
     /* Empty state & Spinners */
     .empty {
       text-align: center;
-      padding: 44px;
+      padding: 48px;
       color: var(--text-muted);
-      font-size: 13.5px;
+      font-size: 14px;
     }
 
     .spinner {
       display: inline-block;
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
       border: 2px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
@@ -1197,8 +1275,8 @@
     .switch {
       position: relative;
       display: inline-block;
-      width: 40px;
-      height: 22px;
+      width: 44px;
+      height: 24px;
       vertical-align: middle;
     }
 
@@ -1215,49 +1293,45 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: var(--bg-card-hover);
-      border: 1px solid var(--border);
-      transition: .2s ease;
+      background-color: rgba(255, 255, 255, 0.15);
+      transition: .25s ease;
       border-radius: 24px;
     }
 
     .slider:before {
       position: absolute;
       content: "";
-      height: 16px;
-      width: 16px;
-      left: 2px;
-      bottom: 2px;
-      background-color: #fff;
-      transition: .2s ease;
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .25s ease;
       border-radius: 50%;
     }
 
     input:checked+.slider {
       background-color: var(--accent);
-      border-color: var(--accent);
     }
 
     input:checked+.slider:before {
-      transform: translateX(18px);
+      transform: translateX(20px);
     }
 
     /* Impersonation Bar */
     #imp-bar {
-      background: rgba(231, 163, 62, 0.12);
-      border-bottom: 1px solid rgba(231, 163, 62, 0.3);
-      color: var(--accent-amber);
-      padding: 9px 24px;
-      font-size: 12.5px;
+      background: rgba(245, 158, 11, 0.15);
+      border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+      padding: 10px 28px;
+      font-size: 13px;
       font-weight: 600;
       display: none;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 8px;
     }
 
-    /* ---- Responsive Adjustments ---- */
+    /* Responsive Adjustments */
     .mobile-menu-btn {
       display: none;
     }
@@ -1276,15 +1350,14 @@
         width: 100%;
         border-right: none;
         border-bottom: 1px solid var(--border);
-        padding: 28px 22px;
-        overflow-y: visible;
+        padding: 32px 24px;
       }
 
       .auth-form-panel {
         flex: none;
         width: 100%;
-        padding: 40px 22px;
-        min-height: 0;
+        padding: 48px 24px;
+        min-height: 500px;
       }
 
       .bento-top,
@@ -1296,87 +1369,51 @@
 
     @media (max-width: 768px) {
       .topbar {
-        padding: 8px 16px;
-        height: auto;
-        min-height: 56px;
-      }
-
-      .topbar-left {
-        flex: 1 1 100%;
-      }
-
-      .refresh-row {
-        flex: 1 1 100%;
-        justify-content: flex-start;
+        padding: 0 16px;
       }
 
       .panel {
-        margin: 0 12px 18px;
-        border-radius: var(--radius-sm);
+        margin: 0 16px 20px;
       }
 
       .kpi-grid {
-        grid-template-columns: repeat(2, 1fr);
-        padding: 14px 12px 0;
-        gap: 10px;
-      }
-
-      .kpi-card {
-        padding: 13px 14px;
-      }
-
-      .kpi-card .value {
-        font-size: 19px;
+        grid-template-columns: 1fr !important;
+        padding: 16px 16px 0;
+        gap: 12px;
       }
 
       .analytics-grid {
         grid-template-columns: 1fr !important;
-        padding: 12px;
-      }
-
-      .analytics-card[style*="span 2"] {
-        grid-column: auto !important;
+        padding: 16px;
       }
 
       .stat-split {
         flex-direction: column;
-        gap: 8px;
-      }
-
-      th,
-      td {
-        padding: 10px 12px;
-        font-size: 12.5px;
+        gap: 10px;
       }
 
       .mobile-menu-btn {
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        color: var(--text-primary);
-        width: 32px;
-        height: 32px;
-        font-size: 16px;
+        display: block !important;
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 20px;
         cursor: pointer;
-        padding: 0;
+        padding: 0 10px 0 0;
       }
 
       .tabs {
         display: none;
         position: absolute;
-        top: 100%;
+        top: 68px;
         left: 0;
         right: 0;
         background: var(--bg-surface);
-        border: 1px solid var(--border);
         flex-direction: column;
-        padding: 8px;
-        border-radius: 0 0 var(--radius-md) var(--radius-md);
+        padding: 12px;
+        border-radius: 0 0 16px 16px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
         z-index: 1000;
-        gap: 2px;
       }
 
       .tabs.open {
@@ -1385,49 +1422,24 @@
 
       .tab {
         width: 100%;
-        border-radius: var(--radius-sm);
-        padding: 11px 12px;
-        border-bottom: none;
+        border-radius: 8px;
+        padding: 12px 14px;
       }
 
-      .tab.active {
-        background: var(--bg-card-hover);
+      .tab.active::after {
+        display: none;
       }
 
       #outbound-composer-grid {
         grid-template-columns: 1fr !important;
-        padding: 16px !important;
       }
 
       .auth-brand h2 {
-        font-size: 22px;
+        font-size: 24px;
       }
 
       .auth-card-inner {
-        padding: 22px;
-      }
-
-      /* Catch inline two-column grids used throughout settings/modals */
-      [style*="grid-template-columns:1fr 1fr"],
-      [style*="grid-template-columns: 1fr 1fr"] {
-        grid-template-columns: 1fr !important;
-      }
-    }
-
-    @media (max-width: 640px) {
-
-      #add-product-overlay>div,
-      #edit-product-overlay>div {
-        width: 100% !important;
-        max-width: 100% !important;
-        height: 100% !important;
-        max-height: 100% !important;
-        border-radius: 0 !important;
-        padding: 20px !important;
-      }
-
-      .demo-modal-inner {
-        max-width: 100vw !important;
+        padding: 24px;
       }
     }
   </style>
@@ -1448,8 +1460,8 @@
             <path d="M9 11H15V13H9V11Z" fill="white" />
             <defs>
               <linearGradient id="helio-grad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#25D366" />
-                <stop offset="1" stop-color="#128C4A" />
+                <stop stop-color="#10b981" />
+                <stop offset="1" stop-color="#0ea5e9" />
               </linearGradient>
             </defs>
           </svg>
@@ -1597,7 +1609,7 @@
     </div>
     <div class="refresh-row">
       <span id="topbar-agent-pill"
-        style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#25D366;color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:4px"
+        style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#10b981;color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:4px"
         onclick="toggleAgentActiveFromTopbar()" title="Click to turn AI Agent ON/OFF">&#9679; Agent: ON</span>
       <span id="topbar-lang-pill"
         style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-secondary);cursor:pointer"
@@ -1807,8 +1819,8 @@
       <div style="display:flex;gap:12px;align-items:center">
         <span class="count" id="inventory-count">0</span>
         <button onclick="openAddProduct()"
-          style="background:linear-gradient(135deg,#25D366,#128C4A);color:#fff;border:none;padding:7px 16px;
-                     border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(37,211,102,.25)">
+          style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:7px 16px;
+                     border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(16,185,129,.25)">
           + Add Product
         </button>
       </div>
@@ -1999,7 +2011,7 @@
             Composition Mode</label>
           <div style="display:flex;gap:10px">
             <button type="button" id="ob-mode-ai-btn" onclick="setOutboundMode('ai_prompt')"
-              style="flex:1;padding:10px;border:2px solid var(--accent);background:rgba(37,211,102,0.12);color:var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+              style="flex:1;padding:10px;border:2px solid var(--accent);background:rgba(16,185,129,0.12);color:var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
               <span>&#10024;</span> AI Prompt Generator
             </button>
             <button type="button" id="ob-mode-tpl-btn" onclick="setOutboundMode('template')"
@@ -2074,7 +2086,7 @@
             <span>&#128065;</span> Generate Live Preview
           </button>
           <button type="button" id="ob-send-btn" onclick="sendOutboundBroadcast()"
-            style="flex:1.4;background:linear-gradient(135deg,#25D366,#128C4A);color:#fff;border:none;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 4px 16px var(--accent-glow)">
+            style="flex:1.4;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 4px 16px var(--accent-glow)">
             <span>&#128227;</span> <span id="ob-send-btn-text">Send Broadcast Now</span>
           </button>
         </div>
@@ -2089,7 +2101,7 @@
           style="background:#0b141a;border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,0.5)">
           <div style="background:#1f2c34;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px">
             <div
-              style="width:34px;height:34px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff">
+              style="width:34px;height:34px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff">
               &#128172;
             </div>
             <div style="flex:1">
@@ -2125,7 +2137,7 @@
 
         <!-- Context Continuity Guarantee Card -->
         <div
-          style="background:rgba(37,211,102,0.06);border:1px solid rgba(37,211,102,0.2);border-radius:12px;padding:16px">
+          style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:16px">
           <div style="display:flex;gap:12px;align-items:flex-start">
             <span style="font-size:22px;line-height:1">&#129302;</span>
             <div>
@@ -2228,7 +2240,7 @@
           <span id="wa-status-badge"
             style="font-size:12px;font-weight:600;padding:4px 12px;border-radius:12px;background:rgba(255,255,255,0.06);color:var(--text-secondary)">Checking…</span>
           <button id="wa-connect-btn" onclick="connectWhatsapp()"
-            style="background:linear-gradient(135deg,#25D366,#128C4A);color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 2px 10px var(--accent-glow)">&#128241;
+            style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 2px 10px var(--accent-glow)">&#128241;
             Connect WhatsApp</button>
           <button id="wa-disconnect-btn" onclick="disconnectWhatsapp()"
             style="display:none;background:#ef4444;color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Disconnect
@@ -2263,7 +2275,7 @@
         </div>
         <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
           <span id="agent-active-badge"
-            style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;background:rgba(37,211,102,0.12);color:var(--accent)">&#9679;
+            style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;background:rgba(16,185,129,0.12);color:var(--accent)">&#9679;
             Agent is Active (Auto-replying)</span>
           <span id="agent-active-status" style="font-size:12px;color:var(--text-muted)"></span>
         </div>
@@ -2298,7 +2310,7 @@
               <option value="urdu_script">Urdu Script (اردو رسم الخط - e.g. "آپ کا آرڈر کنفرم ہے")</option>
             </select>
             <button onclick="saveLanguageMode(document.getElementById('setting-agent-language').value)"
-              style="background:var(--accent);color:#04140B;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+              style="background:var(--accent);color:#042f2e;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
           </div>
           <div style="font-size:11px;color:var(--text-muted);line-height:1.5" id="urdu-mode-description">
             <b>Auto-detect:</b> If customer writes in Urdu script, agent replies in Urdu script. If Roman Urdu, agent
@@ -2308,7 +2320,7 @@
         <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">
           <span id="urdu-setting-status" style="font-size:12px;color:var(--accent);font-weight:600"></span>
           <span id="urdu-badge"
-            style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(37,211,102,0.12);color:var(--accent)">Urdu
+            style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(16,185,129,0.12);color:var(--accent)">Urdu
             Active</span>
         </div>
       </div>
@@ -2337,7 +2349,7 @@
                 <option value="sales">Sales Assistant Only (E-commerce / catalog orders only)</option>
               </select>
               <button onclick="saveSetting('agent_mode','setting-agent-mode','agent-mode-status')"
-                style="background:var(--accent);color:#04140B;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+                style="background:var(--accent);color:#042f2e;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
             </div>
             <span id="agent-mode-status" style="font-size:12px;color:var(--accent);font-weight:600"></span>
           </div>
@@ -2354,7 +2366,7 @@
             <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
               <button
                 onclick="saveSetting('business_knowledge','setting-business-knowledge','business-knowledge-status')"
-                style="background:var(--accent);color:#04140B;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save
+                style="background:var(--accent);color:#042f2e;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save
                 Knowledge</button>
               <span id="business-knowledge-status" style="font-size:12px;color:var(--accent);font-weight:600"></span>
             </div>
@@ -2371,7 +2383,7 @@
               style="width:100%;resize:vertical"></textarea>
             <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
               <button onclick="saveSetting('services_offered','setting-services-offered','services-offered-status')"
-                style="background:var(--accent);color:#04140B;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save
+                style="background:var(--accent);color:#042f2e;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save
                 Services</button>
               <span id="services-offered-status" style="font-size:12px;color:var(--accent);font-weight:600"></span>
             </div>
@@ -2417,7 +2429,7 @@
             <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
               <button
                 onclick="saveSetting('custom_instructions','setting-custom-instructions','custom-instructions-status')"
-                style="background:var(--accent);color:#04140B;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save
+                style="background:var(--accent);color:#042f2e;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save
                 Instructions</button>
               <span id="custom-instructions-status" style="font-size:12px;color:var(--accent);font-weight:600"></span>
             </div>
@@ -2435,7 +2447,7 @@
           <div style="display:flex;gap:10px;align-items:center">
             <input id="setting-business-name" type="text" placeholder="e.g. Al-Touheed Wholesale" style="flex:1">
             <button onclick="saveSetting('business_name','setting-business-name','business-name-status')"
-              style="background:var(--accent);color:#04140B;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+              style="background:var(--accent);color:#042f2e;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
             <span id="business-name-status" style="font-size:12px;color:var(--text-secondary)"></span>
           </div>
         </div>
@@ -2449,7 +2461,7 @@
             style="width:100%;resize:vertical"></textarea>
           <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
             <button onclick="saveSetting('business_description','setting-business-description','business-desc-status')"
-              style="background:var(--accent);color:#04140B;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+              style="background:var(--accent);color:#042f2e;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
             <span id="business-desc-status" style="font-size:12px;color:var(--text-secondary)"></span>
           </div>
         </div>
@@ -2462,7 +2474,7 @@
             <input id="setting-delivery-charge" type="number" min="0" step="1" placeholder="e.g. 200"
               style="width:160px">
             <button onclick="saveDeliveryCharge()"
-              style="background:var(--accent);color:#04140B;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+              style="background:var(--accent);color:#042f2e;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
             <span id="delivery-charge-status" style="font-size:12px;color:var(--text-secondary)"></span>
           </div>
         </div>
@@ -2475,7 +2487,7 @@
             <input id="setting-delivery-estimate" type="text" placeholder="e.g. 3 or 2-3 business days" style="flex:1">
             <button
               onclick="saveSetting('delivery_estimate_days','setting-delivery-estimate','delivery-estimate-status')"
-              style="background:var(--accent);color:#04140B;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+              style="background:var(--accent);color:#042f2e;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
             <span id="delivery-estimate-status" style="font-size:12px;color:var(--text-secondary)"></span>
           </div>
         </div>
@@ -2488,7 +2500,7 @@
             style="width:100%;font-family:var(--mono);resize:vertical"></textarea>
           <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
             <button onclick="saveBankDetails()"
-              style="background:var(--accent);color:#04140B;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
+              style="background:var(--accent);color:#042f2e;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Save</button>
             <span id="bank-details-status" style="font-size:12px;color:var(--text-secondary)"></span>
           </div>
         </div>
@@ -2620,7 +2632,7 @@
           <div id="add-product-error"
             style="display:none;background:rgba(239,68,68,0.1);color:#f87171;padding:8px 12px;border-radius:8px;font-size:12px">
           </div>
-          <button type="submit" id="np-submit" style="background:var(--accent);color:#04140B;border:none;padding:12px;border-radius:8px;
+          <button type="submit" id="np-submit" style="background:var(--accent);color:#042f2e;border:none;padding:12px;border-radius:8px;
                        cursor:pointer;font-size:14px;font-weight:700;width:100%">
             Create Product
           </button>
@@ -2672,7 +2684,7 @@
             <input id="ep-tags" type="text" style="width:100%">
           </div>
           <div id="edit-product-error" style="display:none;color:#f87171;font-size:13px;font-weight:600"></div>
-          <button type="submit" id="ep-submit" style="background:var(--accent);color:#04140B;border:none;padding:12px;border-radius:8px;
+          <button type="submit" id="ep-submit" style="background:var(--accent);color:#042f2e;border:none;padding:12px;border-radius:8px;
                        cursor:pointer;font-size:14px;font-weight:700;width:100%">
             Save Changes
           </button>
@@ -2928,7 +2940,7 @@
       } else { deltaEl.textContent = 'No prior data'; }
 
       // Orders by status
-      const statusColors = { paid: '#25D366', awaiting_payment: '#f59e0b', pending_delivery: '#3b82f6', cancelled: '#ef4444' };
+      const statusColors = { paid: '#10b981', awaiting_payment: '#f59e0b', pending_delivery: '#3b82f6', cancelled: '#ef4444' };
       const statusLabels = { paid: 'Paid', awaiting_payment: 'Awaiting Payment', pending_delivery: 'Pending Delivery', cancelled: 'Cancelled' };
       const statusCount = {};
       allOrders.forEach(o => { statusCount[o.status] = (statusCount[o.status] || 0) + 1; });
@@ -3099,7 +3111,7 @@
           <input id="stock-${safeSkuId}" type="number" min="0" value="${p.stock}"
                  style="width:70px;padding:5px 8px;border-radius:6px;font-size:12px">
           <button onclick="updateStock('${p.sku}','${safeSkuId}')"
-                  style="background:var(--accent);color:#04140B;border:none;padding:5px 12px;
+                  style="background:var(--accent);color:#042f2e;border:none;padding:5px 12px;
                          border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">
             Save
           </button>
@@ -3117,7 +3129,7 @@
             <input id="file-${safeSkuId}" type="file" accept="image/jpeg,image/png,image/webp,video/mp4"
                    style="font-size:11px;flex:1;min-width:0">
             <button onclick="uploadMediaFile('${p.sku}','${safeSkuId}')"
-                    style="background:#128C4A;color:#fff;border:none;padding:4px 10px;
+                    style="background:#0ea5e9;color:#fff;border:none;padding:4px 10px;
                            border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">
               Upload
             </button>
@@ -3223,7 +3235,7 @@
       const badge = document.getElementById('wa-status-badge');
       if (!badge) return;
       const map = {
-        ready: ['Connected', '#34d399', 'rgba(37,211,102,0.15)'],
+        ready: ['Connected', '#34d399', 'rgba(16,185,129,0.15)'],
         qr_pending: ['Scan QR to connect', '#fbbf24', 'rgba(245,158,11,0.15)'],
         disconnected: ['Reconnecting…', '#fbbf24', 'rgba(245,158,11,0.15)'],
         logged_out: ['Disconnected — reconnect', '#f87171', 'rgba(239,68,68,0.15)'],
@@ -3393,7 +3405,7 @@
       if (badge) {
         if (enabled) {
           badge.textContent = 'Urdu Active (' + modeLabel + ')';
-          badge.style.background = 'rgba(37,211,102,0.12)';
+          badge.style.background = 'rgba(16,185,129,0.12)';
           badge.style.color = 'var(--accent)';
         } else {
           badge.textContent = 'English Only';
@@ -3404,9 +3416,9 @@
       if (topPill) {
         if (enabled) {
           topPill.textContent = '🌐 Urdu: ' + (mode === 'auto' ? 'Auto' : mode === 'roman_urdu' ? 'Roman' : 'Script');
-          topPill.style.background = 'rgba(37,211,102,0.12)';
+          topPill.style.background = 'rgba(16,185,129,0.12)';
           topPill.style.color = 'var(--accent)';
-          topPill.style.borderColor = 'rgba(37,211,102,0.3)';
+          topPill.style.borderColor = 'rgba(16,185,129,0.3)';
         } else {
           topPill.textContent = '🌐 English Only';
           topPill.style.background = 'rgba(255,255,255,0.04)';
@@ -3478,7 +3490,7 @@
         if (active) {
           badge.innerHTML = '&#9679; Agent is Active (Auto-replying)';
           badge.style.color = '#34d399';
-          badge.style.background = 'rgba(37,211,102,0.12)';
+          badge.style.background = 'rgba(16,185,129,0.12)';
         } else {
           badge.innerHTML = '&#10074;&#10074; Agent is Paused (Manual chat mode)';
           badge.style.color = '#f87171';
@@ -3490,7 +3502,7 @@
       if (topPill) {
         if (active) {
           topPill.innerHTML = '&#9679; Agent: ON';
-          topPill.style.background = '#25D366';
+          topPill.style.background = '#10b981';
           topPill.title = 'AI Agent is ON — Click to pause auto-replies';
         } else {
           topPill.innerHTML = '&#10074;&#10074; Agent: PAUSED';
@@ -3743,7 +3755,7 @@
         const action = r.status === 'pending'
           ? `<div style="display:flex;flex-direction:column;gap:5px">
            <button onclick="approveRefund(${r.id},'${r.order_ref || ''}')"
-                   style="background:#25D366;color:#04140B;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">
+                   style="background:#10b981;color:#042f2e;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">
              Approve & Notify
            </button>
            <button onclick="rejectRefund(${r.id},'${r.order_ref || ''}')"
@@ -3832,7 +3844,7 @@
         const actions = v.status === 'pending' ? `
       <div style="display:flex;flex-direction:column;gap:5px">
         <button onclick="adminVerifyPayment(${v.id})"
-                style="background:#25D366;color:#04140B;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">
+                style="background:#10b981;color:#042f2e;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">
           Verify Order
         </button>
         <button onclick="adminRequestResend(${v.id})"
@@ -3923,7 +3935,7 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${b.status !== 'completed' ? `
           <button onclick="updateBookingStatus(${b.id}, 'completed')"
-                  style="background:#25D366;color:#04140B;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">
+                  style="background:#10b981;color:#042f2e;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">
             ✓ Done
           </button>` : ''}
         ${b.status !== 'cancelled' ? `
@@ -3983,12 +3995,12 @@
       const tplSec = document.getElementById('ob-section-tpl');
 
       if (mode === 'ai_prompt') {
-        if (aiBtn) { aiBtn.style.border = '2px solid var(--accent)'; aiBtn.style.background = 'rgba(37,211,102,0.12)'; aiBtn.style.color = 'var(--accent)'; }
+        if (aiBtn) { aiBtn.style.border = '2px solid var(--accent)'; aiBtn.style.background = 'rgba(16,185,129,0.12)'; aiBtn.style.color = 'var(--accent)'; }
         if (tplBtn) { tplBtn.style.border = '1px solid var(--border)'; tplBtn.style.background = 'var(--bg-card)'; tplBtn.style.color = 'var(--text-secondary)'; }
         if (aiSec) aiSec.style.display = '';
         if (tplSec) tplSec.style.display = 'none';
       } else {
-        if (tplBtn) { tplBtn.style.border = '2px solid var(--accent)'; tplBtn.style.background = 'rgba(37,211,102,0.12)'; tplBtn.style.color = 'var(--accent)'; }
+        if (tplBtn) { tplBtn.style.border = '2px solid var(--accent)'; tplBtn.style.background = 'rgba(16,185,129,0.12)'; tplBtn.style.color = 'var(--accent)'; }
         if (aiBtn) { aiBtn.style.border = '1px solid var(--border)'; aiBtn.style.background = 'var(--bg-card)'; aiBtn.style.color = 'var(--text-secondary)'; }
         if (tplSec) tplSec.style.display = '';
         if (aiSec) aiSec.style.display = 'none';
@@ -4313,7 +4325,7 @@
       const onSuccess = () => {
         if (btn) {
           btn.textContent = 'Copied!';
-          btn.style.background = '#25D366';
+          btn.style.background = '#10b981';
           setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
         }
       };
