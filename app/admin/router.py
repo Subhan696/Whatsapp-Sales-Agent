@@ -507,6 +507,333 @@ async def remove_product(
     return {"deleted": sku}
 
 
+class CatalogSourceCreate(BaseModel):
+    kind: str = "website"  # "website" | "supabase" | "postgres"
+    # Website URL, or the Supabase project URL (https://xyz.supabase.co)
+    url: str = ""
+    sync_interval_minutes: int = 60
+    api_key: str | None = None            # supabase
+    connection_string: str | None = None  # postgres
+    table: str | None = None
+    select: str | None = None             # supabase embedded select, e.g. "*,product_variants(*)"
+    query: str | None = None              # postgres custom SELECT (instead of table)
+    mapping: dict[str, str | None] | None = None
+    image_base_url: str | None = None
+    product_url_template: str | None = None
+    currency: str | None = None
+    # /test only: re-test a saved source using its stored credentials.
+    source_id: int | None = None
+
+
+class CatalogSourceUpdate(BaseModel):
+    enabled: bool | None = None
+    sync_interval_minutes: int | None = None
+    mapping: dict[str, str | None] | None = None
+    image_base_url: str | None = None
+    product_url_template: str | None = None
+    currency: str | None = None
+    table: str | None = None
+    select: str | None = None
+    query: str | None = None
+    api_key: str | None = None
+    connection_string: str | None = None
+
+
+def _check_interval(minutes: int) -> int:
+    from app.catalog_sync.service import INTERVAL_CHOICES
+
+    if minutes not in INTERVAL_CHOICES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"sync_interval_minutes must be one of {', '.join(map(str, INTERVAL_CHOICES))}",
+        )
+    return minutes
+
+
+def _clean(v: str | None) -> str | None:
+    return v.strip() if v and v.strip() else None
+
+
+def _db_source_settings(body: CatalogSourceCreate) -> tuple[str, dict, str]:
+    """Validate a database source. Returns (display url, public config, secret)."""
+    from app.catalog_sync.database import (
+        FIELD_ALIASES,
+        DatabaseSourceError,
+        _check_identifier,
+        _validate_query,
+        postgres_display_url,
+        supabase_display_url,
+    )
+    from app.catalog_sync.http import UnsafeURLError, normalize_site_url
+
+    config: dict = {
+        k: v for k, v in {
+            "image_base_url": _clean(body.image_base_url),
+            "product_url_template": _clean(body.product_url_template),
+            "currency": (_clean(body.currency) or "").upper()[:10] or None,
+            "mapping": {k: v for k, v in (body.mapping or {}).items() if k in FIELD_ALIASES} or None,
+        }.items() if v
+    }
+    try:
+        if body.kind == "supabase":
+            project_url = normalize_site_url(body.url)
+            secret = _clean(body.api_key)
+            if not secret:
+                raise HTTPException(status_code=422, detail="Supabase API key is required")
+            table = _check_identifier(body.table or "")
+            config.update(project_url=project_url, table=table)
+            if _clean(body.select):
+                config["select"] = _clean(body.select)
+            return supabase_display_url(project_url, table), config, secret
+        if body.kind == "postgres":
+            secret = _clean(body.connection_string)
+            if not secret:
+                raise HTTPException(status_code=422, detail="Connection string is required")
+            if _clean(body.query):
+                config["query"] = _validate_query(body.query)
+            else:
+                config["table"] = _check_identifier(body.table or "")
+            return postgres_display_url(secret, config.get("table"), config.get("query")), config, secret
+    except (DatabaseSourceError, UnsafeURLError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    raise HTTPException(status_code=422, detail="kind must be 'website', 'supabase' or 'postgres'")
+
+
+async def _get_source(db: AsyncSession, source_id: int, tenant_id: int):
+    from app.db.models import CatalogSource
+
+    source = await db.get(CatalogSource, source_id)
+    if source is None or source.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Catalog source not found")
+    return source
+
+
+@router.get("/admin/catalog/sources")
+async def list_catalog_sources(
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Websites and databases this tenant syncs products from."""
+    from sqlalchemy import select
+
+    from app.catalog_sync.database import MAPPABLE_FIELDS
+    from app.catalog_sync.service import INTERVAL_CHOICES, source_to_dict
+    from app.db.models import CatalogSource
+
+    rows = (
+        await db.execute(
+            select(CatalogSource)
+            .where(CatalogSource.tenant_id == tenant_id)
+            .order_by(CatalogSource.created_at)
+        )
+    ).scalars()
+    return {
+        "sources": [source_to_dict(s) for s in rows],
+        "interval_choices": list(INTERVAL_CHOICES),
+        "mappable_fields": MAPPABLE_FIELDS,
+    }
+
+
+@router.post("/admin/catalog/sources/test")
+async def test_catalog_source(
+    body: CatalogSourceCreate,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Connect to a database source without saving it: returns its columns, the
+    detected column mapping, and a preview of the first products. With source_id,
+    re-tests a saved source (its stored credentials, with any config overrides)."""
+    from app.catalog_sync.database import DatabaseSourceError, fetch_rows, rows_to_products
+    from app.crypto import decrypt
+
+    if body.source_id is not None:
+        saved = await _get_source(db, body.source_id, tenant_id)
+        if saved.kind == "website":
+            raise HTTPException(status_code=422, detail="Only database sources can be tested")
+        config = {**(saved.config or {})}
+        if body.mapping is not None:
+            config["mapping"] = body.mapping
+        for key in ("image_base_url", "product_url_template", "currency"):
+            if getattr(body, key) is not None:
+                config[key] = getattr(body, key).strip() or None
+        body.kind, secret = saved.kind, decrypt(saved.secret or "")
+    elif body.kind not in ("supabase", "postgres"):
+        raise HTTPException(status_code=422, detail="Only database sources can be tested")
+    else:
+        _, config, secret = _db_source_settings(body)
+    try:
+        rows = await fetch_rows(body.kind, config, secret, max_rows=200)
+    except DatabaseSourceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read the database: {exc}") from exc
+    products, mapping = rows_to_products(rows, config)
+    columns = list(dict.fromkeys(k for row in rows[:50] for k in row))
+    return {
+        "columns": columns,
+        "mapping": mapping,
+        "rows_read": len(rows),
+        "products_found": len([p for p in products if p.price and p.price > 0]),
+        "preview": [
+            {
+                "name": p.name,
+                "price": str(p.price) if p.price is not None else None,
+                "currency": p.currency,
+                "options": p.options,
+                "image": p.images[0] if p.images else None,
+                "available": p.available,
+                "variants": len(p.variants),
+            }
+            for p in products[:6]
+        ],
+    }
+
+
+@router.post("/admin/catalog/sources", status_code=201)
+async def add_catalog_source(
+    body: CatalogSourceCreate,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Connect a website or database. Products are imported right away, then kept in sync."""
+    from sqlalchemy import select
+
+    from app.catalog_sync.http import UnsafeURLError, normalize_site_url
+    from app.catalog_sync.service import source_to_dict, trigger_sync
+    from app.crypto import encrypt
+    from app.db.models import CatalogSource
+
+    interval = _check_interval(body.sync_interval_minutes)
+    config, secret = None, None
+    if body.kind == "website":
+        try:
+            url = normalize_site_url(body.url)
+        except UnsafeURLError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        url, config, secret = _db_source_settings(body)
+
+    dup = await db.execute(
+        select(CatalogSource).where(CatalogSource.tenant_id == tenant_id, CatalogSource.url == url)
+    )
+    if dup.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="This source is already connected")
+
+    source = CatalogSource(
+        tenant_id=tenant_id,
+        kind=body.kind,
+        url=url,
+        config=config,
+        secret=encrypt(secret) if secret else None,
+        sync_interval_minutes=interval,
+    )
+    db.add(source)
+    await db.flush()
+    await _audit(db, tenant_id=tenant_id, action="add_catalog_source", kind=body.kind, url=url)
+    await db.commit()
+    await db.refresh(source)
+
+    trigger_sync(source.id)
+    return source_to_dict(source)
+
+
+@router.patch("/admin/catalog/sources/{source_id}")
+async def update_catalog_source(
+    source_id: int,
+    body: CatalogSourceUpdate,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    from app.catalog_sync.database import (
+        FIELD_ALIASES,
+        DatabaseSourceError,
+        _check_identifier,
+        _validate_query,
+    )
+    from app.catalog_sync.service import source_to_dict
+    from app.crypto import encrypt
+
+    source = await _get_source(db, source_id, tenant_id)
+    if body.sync_interval_minutes is not None:
+        source.sync_interval_minutes = _check_interval(body.sync_interval_minutes)
+    if body.enabled is not None:
+        source.enabled = body.enabled
+
+    if source.kind != "website":
+        config = dict(source.config or {})
+        try:
+            if body.mapping is not None:
+                config["mapping"] = {k: v for k, v in body.mapping.items() if k in FIELD_ALIASES}
+            for key in ("image_base_url", "product_url_template", "select"):
+                value = getattr(body, key)
+                if value is not None:
+                    config[key] = value.strip() or None
+            if body.currency is not None:
+                config["currency"] = body.currency.strip().upper()[:10] or None
+            if body.table is not None and body.table.strip():
+                config["table"] = _check_identifier(body.table)
+            if body.query is not None:
+                config["query"] = _validate_query(body.query) if body.query.strip() else None
+        except DatabaseSourceError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        source.config = {k: v for k, v in config.items() if v}
+        new_secret = _clean(body.api_key) if source.kind == "supabase" else _clean(body.connection_string)
+        if new_secret:
+            source.secret = encrypt(new_secret)
+
+    await _audit(db, tenant_id=tenant_id, action="update_catalog_source", source_id=source_id)
+    await db.commit()
+    await db.refresh(source)
+    return source_to_dict(source)
+
+
+@router.post("/admin/catalog/sources/{source_id}/sync", status_code=202)
+async def sync_catalog_source_now(
+    source_id: int,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Re-read the source now instead of waiting for the next scheduled sync."""
+    from app.catalog_sync.service import is_running, source_to_dict, trigger_sync
+
+    source = await _get_source(db, source_id, tenant_id)
+    if source.status == "syncing" or is_running(source.id):
+        return {**source_to_dict(source), "status": "syncing", "already_running": True}
+    trigger_sync(source.id)
+    return {**source_to_dict(source), "status": "syncing", "already_running": False}
+
+
+@router.delete("/admin/catalog/sources/{source_id}")
+async def remove_catalog_source(
+    source_id: int,
+    keep_products: bool = False,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Disconnect a source. Its products are deleted (past orders keep their own
+    line-item snapshot) unless keep_products is set, in which case they become
+    regular manually-managed products."""
+    from sqlalchemy import delete, update
+
+    from app.db.models import Product
+
+    source = await _get_source(db, source_id, tenant_id)
+    if keep_products:
+        stmt = (
+            update(Product)
+            .where(Product.catalog_source_id == source.id)
+            .values(catalog_source_id=None, source="manual")
+        )
+    else:
+        stmt = delete(Product).where(Product.catalog_source_id == source.id)
+    result = await db.execute(stmt)
+    await _audit(db, tenant_id=tenant_id, action="remove_catalog_source", url=source.url,
+                 keep_products=keep_products)
+    await db.delete(source)
+    await db.commit()
+    return {"deleted": source_id, "products_affected": result.rowcount, "kept": keep_products}
+
+
 @router.post("/admin/products/{sku}/media/upload")
 async def upload_product_media(
     sku: str,

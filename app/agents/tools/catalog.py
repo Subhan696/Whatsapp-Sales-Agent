@@ -135,6 +135,12 @@ async def _local_search(query: str, *, sort_by: str = "name", tenant_id: int) ->
             tags=r.tags or [],
             image_url=r.image_url,
             video_url=r.video_url,
+            images=r.images or [],
+            options=r.options or {},
+            variants=r.variants or [],
+            compare_at_price=r.compare_at_price,
+            currency=r.currency,
+            source_url=r.source_url,
         )
         for r in rows
     ]
@@ -177,16 +183,20 @@ async def _shopify_search(query: str) -> list[ProductResult]:
 async def send_product_media(
     sku: str,
     state: Annotated[dict, InjectedState],
+    count: int = 1,
 ) -> str:
-    """Send a product photo or video to the customer on WhatsApp.
+    """Send product photo(s) or video to the customer on WhatsApp.
 
     Args:
         sku: The product SKU (from search_catalog results).
+        count: How many photos to send (1-5). Use 1 normally; use more when the
+               customer asks to see more pictures / other angles / all colours.
 
     Call this after search_catalog when the result says a photo or video is available.
     The media is sent directly to the customer's WhatsApp — no text reply needed from you
     after this tool returns success.
     """
+    count = max(1, min(int(count or 1), 5))
     wa_id: str = state.get("wa_id", "")
     customer_id: int | None = state.get("customer_id")
     tenant_id: int = state.get("tenant_id") or 1
@@ -209,29 +219,42 @@ async def send_product_media(
             if customer is None:
                 return "ERROR: Customer not found."
 
-            if product.image_url:
+            images = list(product.images or [])
+            if product.image_url and product.image_url not in images:
+                images.insert(0, product.image_url)
+            if images:
                 media_type = "image"
-                link = product.image_url
+                links = images[:count]
             else:
                 media_type = "video"
-                link = product.video_url  # type: ignore[assignment]
+                links = [product.video_url]  # type: ignore[list-item]
 
-            # Relative paths (uploaded files) need a public base URL for WhatsApp
-            if link.startswith("/"):
-                from app.config import get_settings as _gs
-                link = _gs().BASE_URL.rstrip("/") + link
-
-            caption = f"{product.name} — PKR {product.price:,.2f}"
-            result = await send_media_message(db, customer, media_type, link, caption)
+            from app.config import get_settings as _gs
+            base_url = _gs().BASE_URL.rstrip("/")
+            caption = f"{product.name} — {product.currency or 'PKR'} {product.price:,.2f}"
+            sent, last = 0, None
+            for i, link in enumerate(links):
+                # Relative paths (uploaded files) need a public base URL for WhatsApp
+                if link.startswith("/"):
+                    link = base_url + link
+                last = await send_media_message(
+                    db, customer, media_type, link, caption if i == 0 else ""
+                )
+                if last.status != "sent":
+                    break
+                sent += 1
             await db.commit()
 
     except Exception as exc:
         logger.error("send_product_media_error", error=str(exc), sku=sku, wa_id=wa_id)
         return f"ERROR: could not send media — {exc}"
 
-    if result.status == "sent":
-        return f"{'Photo' if media_type == 'image' else 'Video'} for '{product.name}' sent to customer."
-    return f"Media not sent: {result.status} — {result.detail}"
+    if sent:
+        what = "Video" if media_type == "video" else ("Photo" if sent == 1 else f"{sent} photos")
+        more = len(images) - sent if media_type == "image" else 0
+        extra = f" ({more} more available)" if more > 0 else ""
+        return f"{what} for '{product.name}' sent to customer{extra}."
+    return f"Media not sent: {last.status} — {last.detail}"
 
 
 # ---------------------------------------------------------------------------

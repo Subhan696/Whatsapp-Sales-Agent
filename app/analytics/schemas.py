@@ -60,6 +60,16 @@ class ProductSummary(BaseModel):
     active: bool
     image_url: str | None = None
     video_url: str | None = None
+    tags: list[str] = []
+    source: str = "manual"
+    catalog_source_id: int | None = None
+    source_url: str | None = None
+    images: list[str] = []
+    options: dict[str, list[str]] = {}
+    variants: list[dict] = []
+    compare_at_price: Decimal | None = None
+    currency: str | None = None
+    last_synced_at: datetime | None = None
 
 
 class ProductPageResponse(BaseModel):

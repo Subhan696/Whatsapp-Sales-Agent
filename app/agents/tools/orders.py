@@ -54,6 +54,75 @@ def _sku_fuzzy_match(requested_sku: str, candidates: list) -> object | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def _norm(s: object) -> str:
+    return " ".join(re.sub(r"[^a-z0-9.+]+", " ", str(s).lower()).split())
+
+
+def _option_summary(product) -> str:
+    return "; ".join(f"{k}: {', '.join(v)}" for k, v in (product.options or {}).items())
+
+
+def _resolve_variant(product, requested: str | None) -> tuple[str | None, Decimal | None]:
+    """Pick the variant a customer asked for. Returns (variant label, variant price).
+
+    Raises ValueError with an agent-actionable message when a choice is
+    required but missing, ambiguous, unknown, or sold out.
+    """
+    variants = [v for v in (product.variants or []) if isinstance(v, dict)]
+    options = product.options or {}
+    if len(variants) <= 1 and not options:
+        return None, None
+
+    example = variants[0]["name"] if variants else " / ".join(vals[0] for vals in options.values() if vals)
+    if not requested or not requested.strip():
+        raise ValueError(
+            f"'{product.name}' comes in different options ({_option_summary(product)}). Ask the "
+            f"customer which one they want, then retry create_order with \"variant\" set for this "
+            f"item, e.g. {{\"sku\": \"{product.sku}\", \"quantity\": 1, \"variant\": \"{example}\"}}."
+        )
+
+    parts = [_norm(p.split(":", 1)[-1]) for p in re.split(r"[/,|;]|\s-\s", requested)]
+    parts = [p for p in parts if p]
+
+    if not variants:
+        # Options are known (e.g. sizes from a dropdown) but not per-variant data.
+        all_values = {_norm(v) for vals in options.values() for v in vals}
+        unknown = [p for p in parts if p not in all_values]
+        if unknown:
+            raise ValueError(
+                f"'{requested}' is not an option for '{product.name}'. Available: "
+                f"{_option_summary(product)}. Confirm with the customer and retry."
+            )
+        return requested.strip(), None
+
+    def values(v: dict) -> list[str]:
+        vals = list((v.get("options") or {}).values()) or str(v.get("name", "")).split("/")
+        return [_norm(x) for x in vals]
+
+    exact = [v for v in variants if _norm(v.get("name", "")) == _norm(requested)]
+    matches = exact or [v for v in variants if all(p in values(v) for p in parts)]
+    if not matches:
+        raise ValueError(
+            f"'{requested}' is not an option for '{product.name}'. Available: "
+            f"{_option_summary(product)}. Confirm with the customer and retry."
+        )
+    if len(matches) > 1:
+        names = ", ".join(v.get("name", "?") for v in matches[:8])
+        raise ValueError(
+            f"'{requested}' matches several options of '{product.name}' ({names}). Ask the "
+            "customer to pick exactly one, then retry with that variant."
+        )
+    chosen = matches[0]
+    if not chosen.get("available", True):
+        in_stock = ", ".join(v.get("name", "?") for v in variants if v.get("available", True))
+        raise ValueError(
+            f"'{product.name}' in {chosen.get('name')} is sold out. Still available: "
+            f"{in_stock or 'none'}. Let the customer know and offer an alternative."
+        )
+    price = Decimal(str(chosen["price"])) if chosen.get("price") else None
+    return chosen.get("name") or requested.strip(), price
+
+
 @tool
 async def create_order(
     items_json: str,
@@ -65,10 +134,11 @@ async def create_order(
 
     Args:
         items_json: JSON array of cart items. Format: [{"sku": <exact sku
-            from a search_catalog result>, "quantity": <int>}]. Each sku MUST
-            be copied verbatim from a search_catalog result — never invented
-            or guessed from the product name. If unsure of a SKU, call
-            search_catalog first.
+            from a search_catalog result>, "quantity": <int>, "variant":
+            <chosen option, e.g. "M / Black" — only for products that list
+            sizes/colours/options>}]. Each sku MUST be copied verbatim from a
+            search_catalog result — never invented or guessed from the product
+            name. If unsure of a SKU, call search_catalog first.
         delivery_address: Full delivery address provided by the customer.
         payment_method: Either 'bank_transfer' or 'cod' (cash on delivery).
 
@@ -208,18 +278,20 @@ async def _local_order(
                     f"Only {avail} unit{'s' if avail != 1 else ''} of '{product.name}' "
                     f"in stock (you requested {item.quantity})"
                 )
-            unit_price = product.price
+            variant, variant_price = _resolve_variant(product, item.variant)
+            unit_price = variant_price or product.price
             line_total = (unit_price * item.quantity).quantize(_CENT, ROUND_HALF_UP)
             subtotal += line_total
-            line_items.append(
-                {
-                    "sku": product.sku,
-                    "name": product.name,
-                    "quantity": item.quantity,
-                    "unit_price": str(unit_price),
-                    "line_total": str(line_total),
-                }
-            )
+            line_item = {
+                "sku": product.sku,
+                "name": f"{product.name} ({variant})" if variant else product.name,
+                "quantity": item.quantity,
+                "unit_price": str(unit_price),
+                "line_total": str(line_total),
+            }
+            if variant:
+                line_item["variant"] = variant
+            line_items.append(line_item)
             resolved.append((item, product))
 
         total = (subtotal + delivery_charge).quantize(_CENT, ROUND_HALF_UP)

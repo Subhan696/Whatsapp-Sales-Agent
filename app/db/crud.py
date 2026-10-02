@@ -200,7 +200,9 @@ async def search_products(
     tenant_id: int,
     sort_by: str = "name",  # "name" | "price_asc" | "price_desc"
 ) -> list[Product]:
-    """Case-insensitive search across name, description, and tags with optional price sorting.
+    """Case-insensitive search across name, description, tags and options (sizes,
+    colours) with optional price sorting. Every word of a multi-word query must
+    match somewhere, so "black shirt" finds "Shirt — Color: Black".
 
     Empty query returns ALL active products (useful for browsing / price sorting).
     """
@@ -213,12 +215,16 @@ async def search_products(
 
     base = select(Product).where(Product.active.is_(True), Product.tenant_id == tenant_id)
 
-    if query:
-        q_lower = f"%{query.lower()}%"
+    stopwords = {"a", "an", "the", "for", "of", "with", "and", "in", "on", "to", "me", "my", "some", "any"}
+    words = [w for w in query.lower().split() if w not in stopwords] or query.lower().split()
+    for word in words:
+        q_lower = f"%{word}%"
         base = base.where(
             (func.lower(Product.name).like(q_lower))
             | (func.lower(func.coalesce(Product.description, "")).like(q_lower))
-            | (func.lower(func.coalesce(cast(Product.tags, Text), "")).like(q_lower)),
+            | (func.lower(func.coalesce(cast(Product.tags, Text), "")).like(q_lower))
+            | (func.lower(func.coalesce(cast(Product.options, Text), "")).like(q_lower))
+            | (func.lower(Product.sku).like(q_lower)),
         )
 
     result = await db.execute(base.order_by(order_col).limit(30))

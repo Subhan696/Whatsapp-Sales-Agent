@@ -171,12 +171,34 @@ class Product(Base):
     sku: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    price: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     stock: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     video_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+
+    # Website catalog sync. "manual" products are created in the dashboard;
+    # "website" products are owned by a CatalogSource and overwritten on every sync.
+    source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False, server_default="manual")
+    catalog_source_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("catalog_sources.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # Every product photo URL (image_url is always images[0] when set).
+    images: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # {"Size": ["S", "M", "L"], "Color": ["Black"]}
+    options: Mapped[dict[str, list[str]] | None] = mapped_column(JSON, nullable=True)
+    # [{"name": "M / Black", "options": {"Size": "M", ...}, "price": "1999.00",
+    #   "compare_at_price": "2499.00" | None, "sku": str | None, "available": bool}]
+    variants: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    compare_at_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Fingerprint of the scraped page — lets the LLM fallback skip unchanged pages.
+    source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -184,7 +206,49 @@ class Product(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
+        Index("ix_products_source_external", "catalog_source_id", "external_id"),
+    )
+
+
+class CatalogSource(Base):
+    """Where a tenant's products come from — a website or their own database —
+    kept in sync with the products table."""
+
+    __tablename__ = "catalog_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    # "website" | "supabase" | "postgres"
+    kind: Mapped[str] = mapped_column(String(20), default="website", nullable=False, server_default="website")
+    # Website URL, or a display identifier for databases (never contains credentials).
+    url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # Non-secret database settings: table / select / query / column mapping / image_base_url.
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Encrypted (app.crypto) API key or connection string. Never returned by the API.
+    secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Detected on first sync: "shopify" | "woocommerce" | "generic" | "supabase" | "postgres"
+    platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    sync_interval_minutes: Mapped[int] = mapped_column(
+        Integer, default=60, nullable=False, server_default="60"
+    )
+    # "pending" | "syncing" | "ok" | "error"
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, server_default="pending")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sync_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    product_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    # {"added": n, "updated": n, "removed": n, "pages_scanned": n, "duration_s": f}
+    last_stats: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (UniqueConstraint("tenant_id", "url", name="uq_catalog_sources_tenant_url"),)
 
 
 class Order(Base):

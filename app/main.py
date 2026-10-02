@@ -104,15 +104,21 @@ async def lifespan(app: FastAPI):
     set_graph(build_graph())
     logger.info("agent_graph_ready")
 
-    cancel_task = asyncio.create_task(_auto_cancel_loop())
+    background = [asyncio.create_task(_auto_cancel_loop())]
+    if settings.CATALOG_SYNC_ENABLED:
+        from app.catalog_sync.service import catalog_sync_loop
+
+        background.append(asyncio.create_task(catalog_sync_loop()))
     try:
         yield
     finally:
-        cancel_task.cancel()
-        try:
-            await cancel_task
-        except asyncio.CancelledError:
-            pass
+        for task in background:
+            task.cancel()
+        for task in background:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     from app.db.base import get_engine
 

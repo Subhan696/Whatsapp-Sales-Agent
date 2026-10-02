@@ -15,25 +15,65 @@ class ProductResult(BaseModel):
     tags: list[str] = Field(default_factory=list)
     image_url: str | None = None
     video_url: str | None = None
+    images: list[str] = Field(default_factory=list)
+    options: dict[str, list[str]] = Field(default_factory=dict)
+    variants: list[dict] = Field(default_factory=list)
+    compare_at_price: Decimal | None = None
+    currency: str | None = None
+    source_url: str | None = None
+
+    def _option_lines(self, cur: str) -> list[str]:
+        lines = []
+        available = [v for v in self.variants if v.get("available", True)]
+        for name, values in self.options.items():
+            shown = []
+            for value in values[:25]:
+                offered = [v for v in self.variants if (v.get("options") or {}).get(name) == value]
+                sold_out = offered and not any(v in available for v in offered)
+                shown.append(f"{value} (sold out)" if sold_out else value)
+            lines.append(f"{name}: {', '.join(shown)}")
+
+        prices = {v.get("price") for v in self.variants if v.get("price")}
+        if len(prices) > 1:
+            parts = [
+                f"{v.get('name')}: {cur} {Decimal(v['price']):,.0f}"
+                for v in available[:12]
+                if v.get("price")
+            ]
+            if parts:
+                lines.append("Price by option: " + " · ".join(parts))
+        return lines
 
     def display(self) -> str:
+        cur = self.currency or "PKR"
+        photo_count = len(self.images) or (1 if self.image_url else 0)
         media_hint = ""
-        if self.image_url:
-            media_hint = f"\n📷 Photo available — call send_product_media(sku='{self.sku}') to show the customer"
+        if photo_count:
+            label = f"{photo_count} photos" if photo_count > 1 else "Photo"
+            media_hint = f"\n📷 {label} available — call send_product_media(sku='{self.sku}') to show the customer"
         elif self.video_url:
             media_hint = f"\n🎬 Video available — call send_product_media(sku='{self.sku}') to show the customer"
         availability = "Last few left" if self.stock <= 5 else "In Stock"
+        price = f"{cur} {self.price:,.2f}"
+        if self.compare_at_price and self.compare_at_price > self.price:
+            price += f" (on sale, was {cur} {self.compare_at_price:,.2f})"
+        option_lines = "".join(f"\n{line}" for line in self._option_lines(cur))
+        link = f"\n🔗 {self.source_url}" if self.source_url else ""
         return (
             f"*{self.name}* (SKU: {self.sku})\n"
-            f"Price: PKR {self.price:,.2f} | {availability}\n"
+            f"Price: {price} | {availability}"
+            f"{option_lines}\n"
             f"{self.description[:200]}{'…' if len(self.description) > 200 else ''}"
             f"{media_hint}"
+            f"{link}"
         )
 
 
 class CartItem(BaseModel):
     sku: str
     quantity: int = Field(ge=1)
+    # Chosen size/colour etc. for products with options, e.g. "M / Black" or "Size: M".
+    variant: str | None = None
 
 
 class OrderSummary(BaseModel):

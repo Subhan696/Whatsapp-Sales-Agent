@@ -12,8 +12,13 @@ This system uses an advanced LLM architecture to converse with customers on What
     *   Dynamic payment method switching (COD ↔ Bank Transfer) without losing order context.
     *   Automated invoice formatting and transmission directly in the chat.
     *   Graceful cancellation handling and retention attempts.
+*   **Always-in-sync product catalog**:
+    *   Connect a **website** (Shopify and WooCommerce are read through their public product feeds; any other store is crawled for schema.org / OpenGraph product data, with an LLM fallback for pages without it) or a **database** (Supabase via its REST API, or any PostgreSQL connection string).
+    *   Imports every product with prices, sale prices, sizes / colours / other options, per-variant price and availability, all photos and a link to the product page.
+    *   A background scheduler re-syncs each source on its own interval (15 min – daily); new products appear, changed ones update and removed ones are hidden from the agent automatically.
+    *   The agent quotes options only from synced data, never offers sold-out variants, records the chosen size/colour on the order and can send several product photos.
 *   **Integrated CRM Dashboard**:
-    *   Mobile-responsive web interface for admins.
+    *   Fully mobile-responsive web interface for admins (sidebar on desktop, bottom navigation and card layouts on phones, light & dark themes).
     *   Real-time chat logs and conversation history.
     *   Order management (approve, cancel, track statuses like "Awaiting Payment").
     *   Customer tracking across different CRM stages (lead, interested, closed won, etc.).
@@ -61,6 +66,20 @@ The AI agent is equipped with several backend tools to execute real-world action
 *   `update_payment_method`: Allows seamless switching between COD and Bank Transfer for active orders.
 *   `cancel_order`: Voids incorrect or unwanted orders.
 *   `update_crm` / `flag_cancellation_pending` / `request_refund`: Internal tools to manage the customer's lifecycle stage in the admin dashboard.
+
+## 🔄 Catalog Sync
+
+Dashboard → **Products → Connect source**.
+
+| Source | What you enter | How it's read |
+|---|---|---|
+| Website | Store URL (homepage or a collection page) | Shopify `/products.json`, WooCommerce Store API, otherwise sitemap + crawl of product pages (robots.txt respected) |
+| Supabase | Project URL, API key, table/view, optional `select` (e.g. `*,product_variants(*)`) | PostgREST, paginated |
+| PostgreSQL | Connection string, table/view or a custom `SELECT` | asyncpg inside a `READ ONLY` transaction with a 30 s statement timeout |
+
+For databases, **Test connection** previews the first products and shows how columns were matched (name, price, images, sizes, colours, variants, stock…); adjust the mapping if needed. Relative image paths can be resolved with an *image base URL*, and slug columns turned into links with a *product link template*.
+
+Safety: scraped URLs and database hosts must resolve to public IP addresses (blocks SSRF into your network), API keys and connection strings are encrypted with `SECRETS_ENCRYPTION_KEY`, and are never returned by the API. Implementation lives in `app/catalog_sync/`.
 
 ## 🚀 Getting Started
 

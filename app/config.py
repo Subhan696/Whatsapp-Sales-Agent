@@ -56,6 +56,17 @@ class Settings(BaseSettings):
     # and is unaffected either way.
     CORS_ALLOWED_ORIGINS: str = ""
 
+    # Website catalog sync. The scheduler re-syncs each tenant's website on its
+    # own interval; these cap how much one sync may crawl.
+    CATALOG_SYNC_ENABLED: bool = True
+    CATALOG_SYNC_MAX_PAGES: int = 400
+    CATALOG_SYNC_MAX_PRODUCTS: int = 3000
+    # Pages without structured product data are read by the LLM, at most this many per sync.
+    CATALOG_SYNC_LLM_PAGE_LIMIT: int = 40
+    # Only for local development against a store on localhost/LAN. Never enable
+    # in production: it lets tenants make the server fetch internal addresses.
+    CATALOG_SYNC_ALLOW_PRIVATE_HOSTS: bool = False
+
     # Multi-tenancy — Phase 1 uses a single static tenant.
     # Phase 2 (multi-session manager) will resolve per-message instead.
     DEFAULT_TENANT_ID: int = 1

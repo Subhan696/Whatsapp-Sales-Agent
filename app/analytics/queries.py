@@ -137,6 +137,16 @@ async def get_products_list(db: AsyncSession, *, tenant_id: int) -> ProductPageR
                 active=p.active,
                 image_url=p.image_url,
                 video_url=p.video_url,
+                tags=p.tags or [],
+                source=p.source or "manual",
+                catalog_source_id=p.catalog_source_id,
+                source_url=p.source_url,
+                images=p.images or ([p.image_url] if p.image_url else []),
+                options=p.options or {},
+                variants=p.variants or [],
+                compare_at_price=p.compare_at_price,
+                currency=p.currency,
+                last_synced_at=p.last_synced_at,
             )
             for p in products
         ],
