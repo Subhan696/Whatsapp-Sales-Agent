@@ -237,6 +237,8 @@ svg.i.sm { width: 16px; height: 16px; }
 .badge.danger { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger-bd); }
 .badge.info { background: var(--info-bg); color: var(--info-fg); border-color: var(--info-bd); }
 .badge.violet { background: var(--violet-bg); color: var(--violet-fg); border-color: var(--violet-bd); }
+.badge.live-badge::before { animation: livePulse 1.6s ease-out infinite; }
+@keyframes livePulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); } 100% { box-shadow: 0 0 0 6px transparent; } }
 .badge.brand { background: var(--brand-soft); color: var(--brand-ink); border-color: transparent; }
 
 .pill-toggle {

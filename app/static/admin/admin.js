@@ -832,6 +832,7 @@ async function loadSources() {
 
 function applySourcesResponse(data) {
   const prev = Object.fromEntries(allSources.map((s) => [s.id, s.status]));
+  const prevSynced = Object.fromEntries(allSources.map((s) => [s.id, s.last_synced_at]));
   allSources = data.sources || [];
   if (data.interval_choices) intervalChoices = data.interval_choices;
   if (data.mappable_fields) mappableFields = data.mappable_fields;
@@ -846,9 +847,35 @@ function applySourcesResponse(data) {
       } else if (s.status === 'error') toast(`Sync failed for ${shortUrl(s)}: ${s.last_error || 'unknown error'}`, 'error', 8000);
     }
   });
-  if (finished) safeFetch('/analytics/products').then(renderProducts).catch(() => { });
+  // Live (Realtime) syncs can start and finish between polls — refresh products
+  // whenever a source reports a newer sync time.
+  const resynced = allSources.some((s) => s.id in prevSynced && s.last_synced_at && s.last_synced_at !== prevSynced[s.id]);
+  if (finished || resynced) safeFetch('/analytics/products').then(renderProducts).catch(() => { });
   clearTimeout(sourcePollTimer);
   if (allSources.some((s) => s.status === 'syncing')) sourcePollTimer = setTimeout(loadSources, 3000);
+  else if (currentPage === 'products' && allSources.some((s) => s.realtime && ['live', 'connecting'].includes(s.realtime.state))) {
+    sourcePollTimer = setTimeout(() => { if (!document.hidden && currentPage === 'products') loadSources(); }, 8000);
+  }
+}
+
+function realtimeBadge(s) {
+  const rt = s.realtime;
+  if (!rt || !s.enabled) return '';
+  if (rt.state === 'live') return `<span class="badge success live-badge" data-tip="Changes in Supabase sync within seconds${rt.last_event_at ? '<strong>Last change ' + esc(fmt_relative(rt.last_event_at)) + '</strong>' : ''}">Live</span>`;
+  if (rt.state === 'connecting') return `<span class="badge info plain"><span class="spinner sm" style="width:10px;height:10px;border-width:1.5px"></span>Going live</span>`;
+  if (rt.state === 'not_enabled') return badge('Live updates off', 'warning');
+  if (rt.state === 'error') return badge('Live reconnecting', 'warning');
+  return '';
+}
+
+function realtimeNotice(s) {
+  const rt = s.realtime;
+  if (!rt || !s.enabled || s.status === 'error') return '';
+  if (rt.state === 'not_enabled') {
+    return `<div class="notice warning source-error">${icon('info')}<span><strong>Turn on Realtime to get instant updates.</strong> ${esc(rt.detail)} Until then, products sync every ${esc(intervalLabel(s.sync_interval_minutes))}.</span></div>`;
+  }
+  if (rt.state === 'error' && rt.detail) return `<div class="notice warning source-error">${icon('info')}<span>${esc(rt.detail)} Scheduled syncs continue meanwhile.</span></div>`;
+  return '';
 }
 
 function shortUrl(s) {
@@ -877,14 +904,14 @@ function renderSources() {
       s.platform ? esc(platformNames[s.platform] || s.platform) : null,
       `<span class="num">${s.product_count}</span> products`,
       s.last_synced_at ? 'Synced ' + esc(fmt_relative(s.last_synced_at)) : 'Not synced yet',
-      s.enabled && s.next_sync_at && !syncing ? 'Next ' + esc(fmt_relative(s.next_sync_at)) : null,
+      s.realtime && s.realtime.state === 'live' ? 'Instant updates on' : (s.enabled && s.next_sync_at && !syncing ? 'Next ' + esc(fmt_relative(s.next_sync_at)) : null),
       st.duration_s ? `${st.duration_s}s` : null,
     ].filter(Boolean).map((m) => `<span>${m}</span>`).join('');
     const warnings = (st.warnings || []).length && s.status === 'ok' ? `<div class="notice warning source-error">${icon('info')}<span>${esc(st.warnings.join(' '))}</span></div>` : '';
     return `<div class="source">
       <div class="source-icon">${icon(s.kind === 'website' ? 'globe' : 'database', '')}</div>
       <div style="min-width:0">
-        <div class="source-title"><span class="url" title="${esc(s.url)}">${esc(shortUrl(s))}</span>${status}</div>
+        <div class="source-title"><span class="url" title="${esc(s.url)}">${esc(shortUrl(s))}</span>${status}${realtimeBadge(s)}</div>
         <div class="source-meta">${meta}</div>
       </div>
       <div class="source-controls">
@@ -897,6 +924,7 @@ function renderSources() {
         <button class="btn sm icon danger-ghost" title="Disconnect" onclick="removeSource(${s.id})">${icon('trash')}</button>
       </div>
       ${s.status === 'error' && s.last_error ? `<div class="notice danger source-error">${icon('alert')}<span>${esc(s.last_error)}</span></div>` : warnings}
+      ${realtimeNotice(s)}
     </div>`;
   }).join('');
 }

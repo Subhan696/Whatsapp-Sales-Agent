@@ -348,6 +348,20 @@ async def catalog_sync_loop(tick_seconds: int = 60) -> None:
         await asyncio.sleep(tick_seconds)
 
 
+def _realtime_status(s: CatalogSource) -> dict[str, Any] | None:
+    """Live-update state for Supabase sources (None for other kinds)."""
+    if (s.kind or "website") != "supabase":
+        return None
+    from app.catalog_sync.realtime import realtime_status
+    from app.config import get_settings
+
+    if not get_settings().CATALOG_SYNC_REALTIME_ENABLED:
+        return {"state": "off", "detail": "Live updates are turned off on this server."}
+    if not s.enabled:
+        return {"state": "off", "detail": "Paused"}
+    return realtime_status(s.id) or {"state": "connecting", "detail": ""}
+
+
 def source_to_dict(s: CatalogSource) -> dict[str, Any]:
     def iso(dt: datetime | None) -> str | None:
         dt = _aware(dt)
@@ -378,6 +392,7 @@ def source_to_dict(s: CatalogSource) -> dict[str, Any]:
         "next_sync_at": next_sync,
         "product_count": s.product_count,
         "last_stats": s.last_stats or {},
+        "realtime": _realtime_status(s),
         "created_at": iso(s.created_at),
     }
 

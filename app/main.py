@@ -109,6 +109,10 @@ async def lifespan(app: FastAPI):
         from app.catalog_sync.service import catalog_sync_loop
 
         background.append(asyncio.create_task(catalog_sync_loop()))
+        if settings.CATALOG_SYNC_REALTIME_ENABLED:
+            from app.catalog_sync.realtime import realtime_manager_loop
+
+            background.append(asyncio.create_task(realtime_manager_loop()))
     try:
         yield
     finally:

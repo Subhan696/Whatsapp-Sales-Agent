@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     CATALOG_SYNC_MAX_PRODUCTS: int = 3000
     # Pages without structured product data are read by the LLM, at most this many per sync.
     CATALOG_SYNC_LLM_PAGE_LIMIT: int = 40
+    # Supabase sources get instant updates over Supabase Realtime (one websocket
+    # per source). Scheduled syncs still run as a fallback.
+    CATALOG_SYNC_REALTIME_ENABLED: bool = True
     # Only for local development against a store on localhost/LAN. Never enable
     # in production: it lets tenants make the server fetch internal addresses.
     CATALOG_SYNC_ALLOW_PRIVATE_HOSTS: bool = False

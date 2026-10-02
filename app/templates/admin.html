@@ -15,7 +15,7 @@
     // Apply the saved theme before first paint to avoid a flash.
     try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) { }
   </script>
-  <link rel="stylesheet" href="/static/admin/admin.css?v=3">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=4">
 </head>
 
 <body>
@@ -649,6 +649,7 @@
             <div class="field"><label for="src-sb-table">Table or view</label><input class="input" id="src-sb-table" placeholder="products"></div>
             <div class="field"><label for="src-sb-select">Columns to select <span class="muted">(optional)</span></label><input class="input mono" id="src-sb-select" placeholder="*,product_variants(*)"><span class="hint">Pull related tables in, e.g. variants or images.</span></div>
           </div>
+          <div class="notice brand"><svg class="i sm"><use href="#i-bolt"/></svg><span><strong>Instant updates:</strong> in Supabase open <b>Table Editor → your products table → Enable Realtime</b> (and on any related tables you select). Changes then reach your agent within seconds; otherwise they sync on the schedule below.</span></div>
         </div>
 
         <div class="stack hidden" data-kind-panel="postgres">
@@ -716,7 +717,7 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <div class="tooltip" id="tooltip" role="tooltip"></div>
 
-  <script src="/static/admin/admin.js?v=3"></script>
+  <script src="/static/admin/admin.js?v=4"></script>
 </body>
 
 </html>

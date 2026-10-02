@@ -77,6 +77,8 @@ Dashboard → **Products → Connect source**.
 | Supabase | Project URL, API key, table/view, optional `select` (e.g. `*,product_variants(*)`) | PostgREST, paginated |
 | PostgreSQL | Connection string, table/view or a custom `SELECT` | asyncpg inside a `READ ONLY` transaction with a 30 s statement timeout |
 
+**Instant updates for Supabase:** the server keeps a Supabase Realtime connection open for each Supabase source and re-syncs within seconds of any insert, update or delete on the product table (and tables pulled in via `select`). Turn it on in Supabase with *Table Editor → table → Enable Realtime*; the source card shows **Live** when it's working, and explains what to fix when it isn't. With the anon key, only changes visible under your RLS policies are delivered. Scheduled syncs keep running as a fallback. Disable with `CATALOG_SYNC_REALTIME_ENABLED=false`.
+
 For databases, **Test connection** previews the first products and shows how columns were matched (name, price, images, sizes, colours, variants, stock…); adjust the mapping if needed. Relative image paths can be resolved with an *image base URL*, and slug columns turned into links with a *product link template*.
 
 Safety: scraped URLs and database hosts must resolve to public IP addresses (blocks SSRF into your network), API keys and connection strings are encrypted with `SECRETS_ENCRYPTION_KEY`, and are never returned by the API. Implementation lives in `app/catalog_sync/`.

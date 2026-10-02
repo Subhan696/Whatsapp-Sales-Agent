@@ -734,7 +734,14 @@ async def add_catalog_source(
     await db.refresh(source)
 
     trigger_sync(source.id)
+    _reconcile_realtime()
     return source_to_dict(source)
+
+
+def _reconcile_realtime() -> None:
+    from app.catalog_sync.realtime import request_reconcile
+
+    request_reconcile()
 
 
 @router.patch("/admin/catalog/sources/{source_id}")
@@ -784,6 +791,7 @@ async def update_catalog_source(
     await _audit(db, tenant_id=tenant_id, action="update_catalog_source", source_id=source_id)
     await db.commit()
     await db.refresh(source)
+    _reconcile_realtime()
     return source_to_dict(source)
 
 
@@ -831,6 +839,7 @@ async def remove_catalog_source(
                  keep_products=keep_products)
     await db.delete(source)
     await db.commit()
+    _reconcile_realtime()
     return {"deleted": source_id, "products_affected": result.rowcount, "kept": keep_products}
 
 
