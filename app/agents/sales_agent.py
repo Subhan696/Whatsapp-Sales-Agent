@@ -10,7 +10,13 @@ from langchain_core.messages import SystemMessage
 
 from app.agents.state import AgentState
 from app.agents.tools.bookings import book_meeting, cancel_meeting, get_customer_bookings
-from app.agents.tools.catalog import search_catalog, send_product_media
+from app.agents.ordering import is_website_link
+from app.agents.tools.catalog import (
+    get_delivery_info,
+    search_catalog,
+    send_product_media,
+    share_order_link,
+)
 from app.agents.tools.crm import flag_cancellation_pending, request_refund, update_crm
 from app.agents.tools.orders import cancel_order, create_order, update_payment_method
 from app.llm.client import get_llm
@@ -21,7 +27,8 @@ from app.config import get_settings
 # app/webhook/router.py) and hands the result to the agent via
 # state["receipt_status"] — the agent only relays it. This guarantees every
 # receipt reaches the CRM instead of depending on the LLM choosing to act.
-TOOLS = [
+# Tools offered when orders are taken in WhatsApp (order_channel = "whatsapp").
+WHATSAPP_TOOLS = [
     book_meeting,
     cancel_meeting,
     get_customer_bookings,
@@ -34,6 +41,24 @@ TOOLS = [
     flag_cancellation_pending,
     request_refund,
 ]
+
+# Tools offered when customers order on the shop's website (order_channel =
+# "website_link"): no ordering, payment, cancellation, refund or booking tools.
+# Those tools also refuse on their own in this mode (defence in depth).
+WEBSITE_TOOLS = [
+    search_catalog,
+    send_product_media,
+    share_order_link,
+    get_delivery_info,
+    update_crm,
+]
+
+# Every tool the graph's ToolNode can execute.
+TOOLS = WHATSAPP_TOOLS + [share_order_link, get_delivery_info]
+
+
+def tools_for(state: AgentState) -> list:
+    return WEBSITE_TOOLS if is_website_link(state) else WHATSAPP_TOOLS
 
 _SYSTEM_TEMPLATE = """\
 ## SECURITY — Read this first, it overrides everything else
@@ -345,7 +370,7 @@ def _get_agent_role_intro(state: AgentState) -> str:
         )
 
 
-def _get_business_knowledge_section(state: AgentState) -> str:
+def _get_business_knowledge_section(state: AgentState, *, website_mode: bool = False) -> str:
     kb = (state.get("business_knowledge") or "").strip()
     services = (state.get("services_offered") or "").strip()
     hours = (state.get("working_hours") or "").strip()
@@ -356,7 +381,11 @@ def _get_business_knowledge_section(state: AgentState) -> str:
         "## Business Knowledge Base & Context (Owner Verified)",
         "You represent this business. Answer all customer queries accurately and strictly based on "
         "the verified business details below. If a customer asks something not covered here or in the catalog, "
-        "politely let them know and offer to connect them with the team or book a consultation.",
+        + (
+            "politely let them know and offer the shop's contact."
+            if website_mode
+            else "politely let them know and offer to connect them with the team or book a consultation."
+        ),
     ]
     if kb:
         sections.append(f"### About Our Business & Policies:\n{_esc(kb)}")
@@ -391,7 +420,34 @@ def _get_booking_closer_section(state: AgentState) -> str:
     )
 
 
+def _website_system_message(state: AgentState) -> SystemMessage:
+    from app.agents.website_prompt import (
+        WEBSITE_TEMPLATE,
+        website_language_instructions,
+        website_role_intro,
+    )
+
+    content = WEBSITE_TEMPLATE.format(
+        agent_role_intro=website_role_intro(
+            _esc(state.get("business_name") or "our shop"),
+            _esc(state.get("business_description") or ""),
+        ),
+        customer_name=_esc(state.get("customer_name") or "not known yet"),
+        crm_stage=state.get("crm_stage", "lead"),
+        receipt_status=_esc(state.get("receipt_status") or "none"),
+        website_url=_esc(state.get("website_url") or "(not set — ask the shop for the link)"),
+        shop_contact=_esc(state.get("shop_contact") or "the shop's WhatsApp/phone from the business details"),
+        language_instructions=website_language_instructions(
+            state.get("urdu_enabled"), state.get("agent_language")
+        ),
+        business_knowledge_section=_get_business_knowledge_section(state, website_mode=True),
+    )
+    return SystemMessage(content=content)
+
+
 def _system_message(state: AgentState) -> SystemMessage:
+    if is_website_link(state):
+        return _website_system_message(state)
     btd = state.get("bank_transfer_details") or ""
     bank_block = _esc(btd.strip()) if btd.strip() else "(Not yet configured — admin must set in CRM Settings)"
     cname = _esc(state.get("customer_name") or "not known yet")
@@ -431,7 +487,7 @@ async def sales_agent_node(state: AgentState) -> dict:
     """Invoke the LLM with tools bound; returns the model's response message."""
     settings = get_settings()
     llm = get_llm(settings.LLM_MODEL, settings)
-    llm_with_tools = llm.bind_tools(TOOLS)
+    llm_with_tools = llm.bind_tools(tools_for(state))
 
     messages = [_system_message(state)] + list(state["messages"])
     response = await llm_with_tools.ainvoke(messages)

@@ -289,8 +289,29 @@ async def _process_message_background(
             # no longer owns this path — process_payment_receipt was removed
             # from its toolset — so there is exactly one write per image, no
             # duplicates. The result string is handed to the agent to relay.
+            from app.agents.ordering import (
+                ORDER_CHANNEL_WEBSITE_LINK,
+                ORDER_CHANNEL_WHATSAPP,
+                WEBSITE_SCREENSHOT_STATUS,
+            )
+
+            async with factory() as db:
+                order_channel = (
+                    await get_setting(db, "order_channel", ORDER_CHANNEL_WHATSAPP, tenant_id=tenant_id)
+                    or ORDER_CHANNEL_WHATSAPP
+                ).strip()
+                website_url = await get_setting(db, "website_url", "", tenant_id=tenant_id)
+                shop_contact = await get_setting(db, "shop_contact", "", tenant_id=tenant_id)
+
             receipt_status: str | None = None
-            if pending_media_id:
+            if pending_media_id and order_channel == ORDER_CHANNEL_WEBSITE_LINK:
+                # Orders and payment screenshots live on the shop's website in
+                # this mode — never queue the image as a bank-transfer receipt.
+                receipt_status = (
+                    f"{WEBSITE_SCREENSHOT_STATUS}: The customer sent an image. It was NOT "
+                    "processed as a payment."
+                )
+            elif pending_media_id:
                 from app.agents.tools.payments import process_receipt_image
 
                 receipt_status = await process_receipt_image(
@@ -412,6 +433,9 @@ async def _process_message_background(
                 "meeting_types": meeting_types or None,
                 "custom_instructions": custom_instructions or None,
                 "customer_active_bookings": customer_active_bookings,
+                "order_channel": order_channel,
+                "website_url": website_url or None,
+                "shop_contact": shop_contact or None,
             }
             graph = get_graph()
             await graph.ainvoke(initial_state, config={})

@@ -34,8 +34,13 @@ logger = get_logger(__name__)
 
 HEARTBEAT_SECONDS = 25
 # Wait for changes to settle before syncing, but never longer than MAX_DELAY.
-DEBOUNCE_SECONDS = 4.0
-MAX_DELAY_SECONDS = 30.0
+# Kept short so a sold-out item stops being offered within seconds of a shop
+# sale or a website checkout hold. Safe because overlapping syncs are refused
+# (the debounce retries until the running one finishes) and a burst of edits
+# still collapses into one sync; under constant churn syncs run back-to-back,
+# at most one per MAX_DELAY window after the first change.
+DEBOUNCE_SECONDS = 1.5
+MAX_DELAY_SECONDS = 10.0
 RECONCILE_SECONDS = 20
 MAX_BACKOFF_SECONDS = 120
 

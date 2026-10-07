@@ -17,6 +17,7 @@ import httpx
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from app.agents.ordering import is_website_link, website_refusal
 from app.config import get_settings
 from app.logging_config import get_logger
 from app.schemas.commerce import CartItem, OrderSummary
@@ -62,6 +63,24 @@ def _option_summary(product) -> str:
     return "; ".join(f"{k}: {', '.join(v)}" for k, v in (product.options or {}).items())
 
 
+def _requested_parts(requested: str) -> list[str]:
+    parts = [_norm(p.split(":", 1)[-1]) for p in re.split(r"[/,|;]|\s-\s", requested)]
+    return [p for p in parts if p]
+
+
+def match_variants(variants: list[dict], requested: str) -> list[dict]:
+    """Variants matching a customer's choice: an exact name ("4-5Y · A") wins,
+    otherwise every requested part must be one of the variant's option values
+    ("M / Black", "Size: M, Color: black", "black")."""
+    def values(v: dict) -> list[str]:
+        vals = list((v.get("options") or {}).values()) or str(v.get("name", "")).split("/")
+        return [_norm(x) for x in vals]
+
+    parts = _requested_parts(requested)
+    exact = [v for v in variants if _norm(v.get("name", "")) == _norm(requested)]
+    return exact or [v for v in variants if parts and all(p in values(v) for p in parts)]
+
+
 def _resolve_variant(product, requested: str | None) -> tuple[str | None, Decimal | None]:
     """Pick the variant a customer asked for. Returns (variant label, variant price).
 
@@ -81,8 +100,7 @@ def _resolve_variant(product, requested: str | None) -> tuple[str | None, Decima
             f"item, e.g. {{\"sku\": \"{product.sku}\", \"quantity\": 1, \"variant\": \"{example}\"}}."
         )
 
-    parts = [_norm(p.split(":", 1)[-1]) for p in re.split(r"[/,|;]|\s-\s", requested)]
-    parts = [p for p in parts if p]
+    parts = _requested_parts(requested)
 
     if not variants:
         # Options are known (e.g. sizes from a dropdown) but not per-variant data.
@@ -95,12 +113,7 @@ def _resolve_variant(product, requested: str | None) -> tuple[str | None, Decima
             )
         return requested.strip(), None
 
-    def values(v: dict) -> list[str]:
-        vals = list((v.get("options") or {}).values()) or str(v.get("name", "")).split("/")
-        return [_norm(x) for x in vals]
-
-    exact = [v for v in variants if _norm(v.get("name", "")) == _norm(requested)]
-    matches = exact or [v for v in variants if all(p in values(v) for p in parts)]
+    matches = match_variants(variants, requested)
     if not matches:
         raise ValueError(
             f"'{requested}' is not an option for '{product.name}'. Available: "
@@ -146,6 +159,8 @@ async def create_order(
     Only call this AFTER the customer has confirmed items, provided their
     delivery address, and chosen a payment method.
     """
+    if is_website_link(state):
+        return website_refusal(state, "Placing an order")
     commerce_mode = state.get("commerce_mode", "whatsapp_only")
     customer_id = state.get("customer_id")
     tenant_id: int = state.get("tenant_id") or 1
@@ -438,6 +453,8 @@ async def cancel_order(
     After a successful cancellation, call update_crm(stage='interested') to roll
     the customer's CRM stage back.
     """
+    if is_website_link(state):
+        return website_refusal(state, "Cancelling an order")
     customer_id: int | None = state.get("customer_id")
     tenant_id: int = state.get("tenant_id") or 1
     wa_id: str = state.get("wa_id", "")
@@ -496,6 +513,8 @@ async def update_payment_method(
     Only updates orders that are awaiting_payment or pending_delivery.
     Paid or cancelled orders cannot be updated.
     """
+    if is_website_link(state):
+        return website_refusal(state, "Changing the payment method")
     customer_id: int | None = state.get("customer_id")
     tenant_id: int = state.get("tenant_id") or 1
     wa_id: str = state.get("wa_id", "")

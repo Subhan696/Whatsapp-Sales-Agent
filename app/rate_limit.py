@@ -31,11 +31,29 @@ def record_failure(key: str) -> None:
     _failure_log[key].append(now)
 
 
+_hit_log: dict[str, list[float]] = defaultdict(list)
+
+
+def allow(key: str, limit: int, window_seconds: float) -> bool:
+    """Sliding-window request limiter: True (and counted) if ``key`` has made
+    fewer than ``limit`` calls in the last ``window_seconds``."""
+    now = time.time()
+    recent = [t for t in _hit_log[key] if now - t < window_seconds]
+    if len(recent) >= limit:
+        _hit_log[key] = recent
+        return False
+    recent.append(now)
+    _hit_log[key] = recent
+    return True
+
+
 def reset(key: str) -> None:
     """Test helper — clear lockout state for a key."""
     _failure_log.pop(key, None)
+    _hit_log.pop(key, None)
 
 
 def reset_all() -> None:
     """Test helper — clear all lockout state."""
     _failure_log.clear()
+    _hit_log.clear()

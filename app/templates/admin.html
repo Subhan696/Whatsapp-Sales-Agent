@@ -444,6 +444,7 @@
             <nav class="settings-nav" aria-label="Settings sections">
               <a href="#set-whatsapp">WhatsApp</a>
               <a href="#set-agent">AI agent</a>
+              <a href="#set-ordering">Ordering</a>
               <a href="#set-language">Language</a>
               <a href="#set-knowledge">Business knowledge</a>
               <a href="#set-store">Store &amp; checkout</a>
@@ -485,6 +486,29 @@
                       <button class="btn" onclick="saveSetting('agent_mode','setting-agent-mode','agent-mode-status')">Save</button>
                     </div>
                     <span class="save-status" id="agent-mode-status"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" id="set-ordering">
+                <div class="card-head"><div><h3>Ordering</h3><p>Where customers place their orders</p></div><span class="badge plain" id="order-channel-badge">In WhatsApp</span></div>
+                <div class="card-body stack">
+                  <div class="setting-row">
+                    <div><h3>Customers order on our website</h3><p>The agent helps them choose, then sends the product link. It never takes orders, bank details, addresses or payment screenshots in chat.</p></div>
+                    <label class="switch"><input id="setting-order-channel-toggle" type="checkbox" onchange="toggleOrderChannel(this.checked)"><span class="track"></span></label>
+                  </div>
+                  <div class="notice info hidden" id="order-channel-note"><svg class="i sm"><use href="#i-info"/></svg><span>Website ordering is on. In-chat orders, receipts and refunds are switched off for the agent; product links come from your synced catalog (each product's page), and the website address below is used for browsing.</span></div>
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="setting-website-url">Website address</label>
+                      <input class="input" id="setting-website-url" type="url" placeholder="https://yourshop.com">
+                      <div class="inline"><button class="btn sm" onclick="saveSetting('website_url','setting-website-url','website-url-status')">Save</button><span class="save-status" id="website-url-status"></span></div>
+                    </div>
+                    <div class="field">
+                      <label for="setting-shop-contact">Shop contact for order questions</label>
+                      <input class="input" id="setting-shop-contact" placeholder="e.g. 0300 1234567 (WhatsApp)">
+                      <div class="inline"><button class="btn sm" onclick="saveSetting('shop_contact','setting-shop-contact','shop-contact-status')">Save</button><span class="save-status" id="shop-contact-status"></span></div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -717,7 +741,7 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <div class="tooltip" id="tooltip" role="tooltip"></div>
 
-  <script src="/static/admin/admin.js?v=4"></script>
+  <script src="/static/admin/admin.js?v=5"></script>
 </body>
 
 </html>

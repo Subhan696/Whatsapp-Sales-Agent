@@ -22,29 +22,41 @@ class ProductResult(BaseModel):
     currency: str | None = None
     source_url: str | None = None
 
-    def _option_lines(self, cur: str) -> list[str]:
-        lines = []
-        available = [v for v in self.variants if v.get("available", True)]
-        for name, values in self.options.items():
-            shown = []
-            for value in values[:25]:
-                offered = [v for v in self.variants if (v.get("options") or {}).get(name) == value]
-                sold_out = offered and not any(v in available for v in offered)
-                shown.append(f"{value} (sold out)" if sold_out else value)
-            lines.append(f"{name}: {', '.join(shown)}")
+    def available_variants(self) -> list[dict]:
+        return [v for v in self.variants if v.get("available", True)]
 
-        prices = {v.get("price") for v in self.variants if v.get("price")}
+    def _option_lines(self, cur: str) -> list[str]:
+        """Only options that can actually be bought are listed — sold-out sizes and
+        designs are left out entirely so the agent never offers them."""
+        lines = []
+        available = self.available_variants()
+        for name, values in self.options.items():
+            if self.variants:
+                values = [
+                    value for value in values
+                    if any((v.get("options") or {}).get(name) == value for v in available)
+                ]
+            if values:
+                lines.append(f"{name}: {', '.join(values[:25])}")
+
+        if len(self.variants) > 1 and available:
+            names = [str(v.get("name")) for v in available[:30] if v.get("name")]
+            if names:
+                lines.append("Choices (use these exact names): " + " | ".join(names))
+
+        prices = {v.get("price") for v in available if v.get("price")}
         if len(prices) > 1:
             parts = [
                 f"{v.get('name')}: {cur} {Decimal(v['price']):,.0f}"
                 for v in available[:12]
                 if v.get("price")
             ]
-            if parts:
-                lines.append("Price by option: " + " · ".join(parts))
+            lines.append("Price by option: " + " · ".join(parts))
         return lines
 
-    def display(self) -> str:
+    def display(self, *, show_scarcity: bool = True) -> str:
+        """Agent-facing summary. ``show_scarcity=False`` never hints at how many
+        pieces are left (some shops forbid it)."""
         cur = self.currency or "PKR"
         photo_count = len(self.images) or (1 if self.image_url else 0)
         media_hint = ""
@@ -53,7 +65,12 @@ class ProductResult(BaseModel):
             media_hint = f"\n📷 {label} available — call send_product_media(sku='{self.sku}') to show the customer"
         elif self.video_url:
             media_hint = f"\n🎬 Video available — call send_product_media(sku='{self.sku}') to show the customer"
-        availability = "Last few left" if self.stock <= 5 else "In Stock"
+        if any(v.get("image") for v in self.available_variants()):
+            media_hint += (
+                "\n📷 Each choice has its own photo — when the customer asks about or picks one, "
+                f"call send_product_media(sku='{self.sku}', variant='<choice name>')"
+            )
+        availability = "Last few left" if show_scarcity and self.stock <= 5 else "In Stock"
         price = f"{cur} {self.price:,.2f}"
         if self.compare_at_price and self.compare_at_price > self.price:
             price += f" (on sale, was {cur} {self.compare_at_price:,.2f})"

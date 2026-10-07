@@ -313,7 +313,7 @@ def test_is_due_respects_interval_and_running_state():
 # ---------------------------------------------------------------------------
 
 
-def test_product_result_display_lists_options_and_sold_out():
+def test_product_result_display_lists_only_available_options():
     from app.schemas.commerce import ProductResult
 
     text = ProductResult(
@@ -327,11 +327,13 @@ def test_product_result_display_lists_options_and_sold_out():
         ],
         source_url="https://store.test/products/tee",
     ).display()
-    assert "Size: S, M (sold out)" in text
+    assert "Size: S\n" in text  # sold-out M is never offered
+    assert "(sold out)" not in text and "1,600" not in text
     assert "was PKR 2,000.00" in text
     assert "2 photos available" in text
     assert "🔗 https://store.test/products/tee" in text
-    assert "Price by option: S: PKR 1,500" in text
+    # Only one choice is available, so there's no per-option price list.
+    assert "Price by option" not in text
 
 
 class _P:

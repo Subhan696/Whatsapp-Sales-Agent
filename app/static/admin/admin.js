@@ -1303,7 +1303,7 @@ function updateUrduUI(enabled, mode) {
 }
 
 async function loadSettings() {
-  const keys = ['business_name', 'business_description', 'delivery_charge', 'delivery_estimate_days', 'bank_transfer_details', 'urdu_enabled', 'agent_language', 'agent_active', 'agent_mode', 'business_knowledge', 'services_offered', 'working_hours', 'meeting_types', 'custom_instructions'];
+  const keys = ['business_name', 'business_description', 'delivery_charge', 'delivery_estimate_days', 'bank_transfer_details', 'urdu_enabled', 'agent_language', 'agent_active', 'agent_mode', 'business_knowledge', 'services_offered', 'working_hours', 'meeting_types', 'custom_instructions', 'order_channel', 'website_url', 'shop_contact'];
   try {
     const results = await Promise.all(keys.map((k) => safeFetch('/admin/settings/' + k)));
     const m = {};
@@ -1324,6 +1324,9 @@ async function loadSettings() {
     $('setting-working-hours').value = m.working_hours;
     $('setting-meeting-types').value = m.meeting_types;
     $('setting-custom-instructions').value = m.custom_instructions;
+    $('setting-website-url').value = m.website_url;
+    $('setting-shop-contact').value = m.shop_contact;
+    updateOrderChannelUI(m.order_channel === 'website_link');
   } catch (e) { toast('Could not load settings: ' + e.message, 'error'); }
 }
 
@@ -1371,6 +1374,27 @@ async function saveSetting(key, inputId, statusId) {
 }
 function saveDeliveryCharge() { return saveSetting('delivery_charge', 'setting-delivery-charge', 'delivery-charge-status'); }
 function saveBankDetails() { return saveSetting('bank_transfer_details', 'setting-bank-details', 'bank-details-status'); }
+
+function updateOrderChannelUI(website) {
+  $('setting-order-channel-toggle').checked = !!website;
+  $('order-channel-note').classList.toggle('hidden', !website);
+  const b = $('order-channel-badge');
+  b.textContent = website ? 'On the website' : 'In WhatsApp';
+  b.className = 'badge plain ' + (website ? 'brand' : '');
+}
+async function toggleOrderChannel(website) {
+  if (website && !$('setting-website-url').value.trim()) {
+    toast('Add your website address first, then switch this on.', 'info');
+    updateOrderChannelUI(false);
+    $('setting-website-url').focus();
+    return;
+  }
+  updateOrderChannelUI(website);
+  try {
+    await api('/admin/settings/order_channel', 'PUT', { value: website ? 'website_link' : 'whatsapp' });
+    toast(website ? 'Customers now order on your website' : 'Orders are taken in WhatsApp again');
+  } catch (e) { updateOrderChannelUI(!website); toast(e.message, 'error'); }
+}
 
 // ---------------------------------------------------------------------------
 // Broadcasts

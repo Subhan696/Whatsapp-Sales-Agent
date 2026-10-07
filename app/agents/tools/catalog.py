@@ -49,6 +49,10 @@ async def search_catalog(
     commerce_mode = state.get("commerce_mode", "whatsapp_only")
     customer_id = state.get("customer_id")
     tenant_id: int = state.get("tenant_id") or 1
+    from app.agents.ordering import is_website_link
+
+    # Website-ordering shops never hint at how many pieces are left.
+    show_scarcity = not is_website_link(state)
 
     # Auto-detect price intent from query words
     _q = query.lower().strip()
@@ -85,7 +89,7 @@ async def search_catalog(
                 header = f"No exact match for '{query}', but here is everything we currently have:\n"
                 lines = [header]
                 for p in shown:
-                    lines.append(p.display())
+                    lines.append(p.display(show_scarcity=show_scarcity))
                     lines.append("")
                 return "\n".join(lines).strip()
         except Exception:
@@ -107,7 +111,7 @@ async def search_catalog(
     shown = products[:20]
     lines = [f"Here are {len(shown)} product(s) {label}:\n"]
     for p in shown:
-        lines.append(p.display())
+        lines.append(p.display(show_scarcity=show_scarcity))
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -179,11 +183,27 @@ async def _shopify_search(query: str) -> list[ProductResult]:
 # ---------------------------------------------------------------------------
 
 
+def _variant_photo_choice(product, requested: str | None) -> tuple[dict | None, str | None]:
+    """The available variant a customer means, or (None, reason-to-tell-the-agent)."""
+    from app.agents.tools.orders import match_variants
+
+    variants = [v for v in (product.variants or []) if isinstance(v, dict)]
+    available = [v for v in variants if v.get("available", True)]
+    matches = match_variants(available, requested or "")
+    if matches:
+        # "Design A" can match several sizes that share a photo — prefer one with its own image.
+        return next((v for v in matches if v.get("image")), matches[0]), None
+    if match_variants(variants, requested or ""):
+        return None, "SOLD_OUT"
+    return None, "UNKNOWN"
+
+
 @tool
 async def send_product_media(
     sku: str,
     state: Annotated[dict, InjectedState],
     count: int = 1,
+    variant: str | None = None,
 ) -> str:
     """Send product photo(s) or video to the customer on WhatsApp.
 
@@ -191,6 +211,9 @@ async def send_product_media(
         sku: The product SKU (from search_catalog results).
         count: How many photos to send (1-5). Use 1 normally; use more when the
                customer asks to see more pictures / other angles / all colours.
+        variant: The size/design the customer asked about or picked, using the exact
+                 choice name from search_catalog (e.g. "4-5Y · A"). Sends THAT choice's
+                 own photo when it has one, otherwise the product photos.
 
     Call this after search_catalog when the result says a photo or video is available.
     The media is sent directly to the customer's WhatsApp — no text reply needed from you
@@ -212,16 +235,29 @@ async def send_product_media(
             if product is None:
                 return f"ERROR: Product '{sku}' not found."
 
-            if not product.image_url and not product.video_url:
+            chosen, problem = (None, None)
+            if variant and variant.strip():
+                chosen, problem = _variant_photo_choice(product, variant)
+                if problem == "SOLD_OUT":
+                    return (
+                        f"'{variant}' of '{product.name}' is sold out — do not offer it. "
+                        "Suggest one of the available choices from search_catalog instead."
+                    )
+
+            images = list(product.images or [])
+            if product.image_url and product.image_url not in images:
+                images.insert(0, product.image_url)
+            variant_image = (chosen or {}).get("image")
+            if variant_image:
+                images = [variant_image] + [u for u in images if u != variant_image]
+
+            if not images and not product.video_url:
                 return f"No photo or video is set for '{product.name}'. Ask the admin to add one."
 
             customer = await get_customer_by_id(db, customer_id)
             if customer is None:
                 return "ERROR: Customer not found."
 
-            images = list(product.images or [])
-            if product.image_url and product.image_url not in images:
-                images.insert(0, product.image_url)
             if images:
                 media_type = "image"
                 links = images[:count]
@@ -231,7 +267,10 @@ async def send_product_media(
 
             from app.config import get_settings as _gs
             base_url = _gs().BASE_URL.rstrip("/")
-            caption = f"{product.name} — {product.currency or 'PKR'} {product.price:,.2f}"
+            cur = product.currency or "PKR"
+            price = Decimal(str(chosen["price"])) if chosen and chosen.get("price") else product.price
+            label = f"{product.name} ({chosen['name']})" if chosen and chosen.get("name") else product.name
+            caption = f"{label} — {cur} {price:,.0f}"
             sent, last = 0, None
             for i, link in enumerate(links):
                 # Relative paths (uploaded files) need a public base URL for WhatsApp
@@ -253,8 +292,242 @@ async def send_product_media(
         what = "Video" if media_type == "video" else ("Photo" if sent == 1 else f"{sent} photos")
         more = len(images) - sent if media_type == "image" else 0
         extra = f" ({more} more available)" if more > 0 else ""
-        return f"{what} for '{product.name}' sent to customer{extra}."
+        note = ""
+        if variant and chosen and not variant_image:
+            note = f" '{chosen.get('name')}' has no photo of its own, so the product photo was sent."
+        elif variant and problem == "UNKNOWN":
+            note = f" '{variant}' did not match a choice, so the product photo was sent."
+        return f"{what} for '{label}' sent to customer{extra}.{note}"
     return f"Media not sent: {last.status} — {last.detail}"
+
+
+# ---------------------------------------------------------------------------
+# Website ordering: product links
+# ---------------------------------------------------------------------------
+
+
+@tool
+async def share_order_link(
+    sku: str,
+    state: Annotated[dict, InjectedState],
+    variant: str | None = None,
+) -> str:
+    """Get the website link the customer uses to order a product (website-ordering shops).
+
+    Args:
+        sku: The product SKU from search_catalog.
+        variant: The size/design the customer chose, using the exact choice name from
+                 search_catalog (e.g. "4-5Y · A"). Required when the product has choices.
+
+    Returns the product page link plus the exact choice to select there. Send it to the
+    customer with the checkout steps — orders are never taken in WhatsApp for these shops.
+    """
+    from app.agents.ordering import is_website_link
+    from app.agents.tools.orders import match_variants
+
+    if not is_website_link(state):
+        return "ERROR: This shop takes orders in WhatsApp — use create_order instead."
+
+    tenant_id: int = state.get("tenant_id") or 1
+    customer_id = state.get("customer_id")
+    try:
+        from app.db.base import get_session_factory
+        from app.db.crud import get_product_by_sku
+
+        async with get_session_factory()() as db:
+            product = await get_product_by_sku(db, sku, tenant_id=tenant_id)
+    except Exception as exc:
+        logger.error("share_order_link_error", error=str(exc), sku=sku)
+        return f"ERROR: could not look up '{sku}' — {exc}"
+
+    if product is None:
+        return f"ERROR: Product '{sku}' not found. Call search_catalog to get the right SKU."
+    if not product.active:
+        return (
+            f"'{product.name}' is no longer available on the website. Apologise and suggest "
+            "similar items from search_catalog."
+        )
+
+    url = product.source_url or state.get("website_url")
+    if not url:
+        return "ERROR: No website link is configured for this product. Ask the customer to contact the shop."
+
+    variants = [v for v in (product.variants or []) if isinstance(v, dict)]
+    available = [v for v in variants if v.get("available", True)]
+    chosen: dict | None = None
+    if len(available) > 1:
+        names = " | ".join(str(v.get("name")) for v in available[:30])
+        if not variant or not variant.strip():
+            return (
+                f"CHOICE_NEEDED: '{product.name}' comes in: {names}. Ask the customer which "
+                "size/design they want, then call share_order_link again with variant set."
+            )
+        matches = match_variants(available, variant)
+        if not matches:
+            if match_variants(variants, variant):
+                return (
+                    f"SOLD_OUT: '{variant}' of '{product.name}' is sold out. Do not offer it. "
+                    f"Available choices: {names}."
+                )
+            return f"UNKNOWN_CHOICE: '{variant}' is not a choice for '{product.name}'. Choices: {names}."
+        if len(matches) > 1:
+            return (
+                f"CHOICE_NEEDED: '{variant}' fits several choices "
+                f"({' | '.join(str(v.get('name')) for v in matches[:10])}). Ask the customer to pick one."
+            )
+        chosen = matches[0]
+    elif len(available) == 1:
+        chosen = available[0]
+    elif variants:
+        return f"SOLD_OUT: '{product.name}' is sold out. Suggest similar items from search_catalog."
+
+    cur = product.currency or "PKR"
+    price = Decimal(str(chosen["price"])) if chosen and chosen.get("price") else product.price
+    pick = ""
+    if chosen:
+        opts = ", ".join(f"{k}: {v}" for k, v in (chosen.get("options") or {}).items())
+        pick = f"\nSelect on the page: {chosen.get('name')}" + (f" ({opts})" if opts else "")
+
+    await _record(customer_id, "share_order_link", {"sku": sku, "variant": variant}, url, tenant_id=tenant_id)
+    return (
+        "ORDER_LINK — send this to the customer (translate the wording to their language, "
+        "keep the link exactly as-is):\n"
+        f"*{product.name}*{pick}\n"
+        f"Price: {cur} {price:,.0f}\n"
+        f"Order here: {url}\n"
+        "Then tell them: open the link, select the size/design above, tap Add to Bag and "
+        "check out on the website."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Delivery charges (shops whose catalog lives in Supabase)
+# ---------------------------------------------------------------------------
+
+_DELIVERY_CACHE_SECONDS = 120
+_delivery_cache: dict[int, tuple[float, dict | None]] = {}
+
+
+async def _load_store_settings(tenant_id: int) -> dict | None:
+    """Read ``store_settings`` (id=1) from the tenant's Supabase catalog source."""
+    import time
+
+    cached = _delivery_cache.get(tenant_id)
+    if cached and time.monotonic() - cached[0] < _DELIVERY_CACHE_SECONDS:
+        return cached[1]
+
+    from sqlalchemy import select
+
+    from app.catalog_sync.http import SafeFetcher, origin_of
+    from app.crypto import decrypt
+    from app.db.base import get_session_factory
+    from app.db.models import CatalogSource
+
+    async with get_session_factory()() as db:
+        source = (
+            await db.execute(
+                select(CatalogSource)
+                .where(
+                    CatalogSource.tenant_id == tenant_id,
+                    CatalogSource.kind == "supabase",
+                    CatalogSource.enabled.is_(True),
+                )
+                .order_by(CatalogSource.id)
+            )
+        ).scalars().first()
+    if source is None or not source.secret or not (source.config or {}).get("project_url"):
+        return None
+
+    key = decrypt(source.secret)
+    url = f"{origin_of(source.config['project_url'])}/rest/v1/store_settings"
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    async with SafeFetcher(timeout=10.0) as f:
+        r = await f.get(
+            url,
+            params={"id": "eq.1", "select": "delivery_charges,free_delivery_threshold,city_delivery_rules"},
+            accept="application/json",
+            headers=headers,
+        )
+    row = None
+    if r.ok:
+        rows = r.json()
+        row = rows[0] if isinstance(rows, list) and rows else None
+    _delivery_cache[tenant_id] = (time.monotonic(), row)
+    return row
+
+
+def _city_rules(raw) -> list[tuple[str, object]]:
+    """Normalise city_delivery_rules into (city, rule) pairs — accepts a JSON string,
+    a {city: rule} object, or a list of objects with a city/name field."""
+    import json as _json
+
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except ValueError:
+            return []
+    if isinstance(raw, dict):
+        return [(str(k), v) for k, v in raw.items()]
+    pairs = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                city = item.get("city") or item.get("name") or item.get("city_name")
+                if city:
+                    pairs.append((str(city), item))
+    return pairs
+
+
+@tool
+async def get_delivery_info(
+    state: Annotated[dict, InjectedState],
+    city: str | None = None,
+) -> str:
+    """Look up the shop's delivery charges, optionally for the customer's city.
+
+    Args:
+        city: The customer's city if they mentioned it (e.g. "Lahore"), else omit.
+
+    Use only when the customer asks about delivery charges or free delivery.
+    Always add that the exact amount is shown at checkout for their city.
+    """
+    import json as _json
+
+    tenant_id: int = state.get("tenant_id") or 1
+    try:
+        settings_row = await _load_store_settings(tenant_id)
+    except Exception as exc:
+        logger.warning("delivery_info_error", error=str(exc), tenant_id=tenant_id)
+        settings_row = None
+    if not settings_row:
+        return (
+            "Delivery details aren't available right now. Tell the customer delivery charges "
+            "depend on their city and the exact amount is shown at checkout."
+        )
+
+    lines = [
+        f"Standard delivery charge: {settings_row.get('delivery_charges')}",
+        f"Free delivery on orders of at least: {settings_row.get('free_delivery_threshold')}",
+    ]
+    rules = _city_rules(settings_row.get("city_delivery_rules"))
+    if city and city.strip():
+        wanted = city.strip().casefold()
+        match = next((r for c, r in rules if c.strip().casefold() == wanted), None) or next(
+            (r for c, r in rules if c.strip().casefold() in wanted or wanted in c.strip().casefold()), None
+        )
+        if match is not None:
+            lines.append(f"Special rule for {city}: {_json.dumps(match, ensure_ascii=False, default=str)}")
+        else:
+            lines.append(f"No special rule for {city} — the standard charge and free-delivery amount apply.")
+    elif rules:
+        lines.append("Cities with special delivery rules: " + ", ".join(c for c, _ in rules[:30]))
+    lines.append(
+        "How to read a city rule: it can make delivery always free, set its own delivery charge "
+        "or its own free-delivery amount, or give a discount — discount types: delivery_rs "
+        "(rupees off delivery), order_pct (percent off the order), order_rs (rupees off the order)."
+    )
+    lines.append("ALWAYS tell the customer the exact amount is shown at checkout for their city.")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

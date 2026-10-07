@@ -183,11 +183,14 @@ async def send_media_message(
     *,
     settings: Settings | None = None,
     _client: WhatsAppClient | None = None,
+    bypass_window: bool = False,
 ) -> OutboundResult:
     """Send an image or video to ``customer`` using a public HTTPS URL.
 
     ``media_type`` must be 'image' or 'video'.
     Enforces the same opt-out and 24-hour window checks as send_text_message.
+    ``bypass_window=True`` skips only the window check, for business-initiated
+    alerts (see /admin/notify); opt-out is always enforced.
     """
     cfg = settings or get_settings()
     client = await _get_client_for_tenant(db, customer, _client)
@@ -196,7 +199,7 @@ async def send_media_message(
         logger.info("send_suppressed_opted_out", customer_id=customer.id)
         return _opted_out()
 
-    if not is_within_service_window(customer, cfg):
+    if not bypass_window and not is_within_service_window(customer, cfg):
         logger.info("send_blocked_outside_window", customer_id=customer.id)
         return _needs_template()
 

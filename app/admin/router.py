@@ -277,11 +277,30 @@ async def put_admin_setting(
             status_code=403,
             detail="Outreach permission can only be modified by platform superadmin",
         )
+    value = _validate_setting(key, body.value)
     from app.db.crud import upsert_setting
-    await upsert_setting(db, key, body.value, tenant_id=tenant_id)
-    await _audit(db, tenant_id=tenant_id, action="update_setting", key=key, value=_redact_setting_value(key, body.value))
+    await upsert_setting(db, key, value, tenant_id=tenant_id)
+    await _audit(db, tenant_id=tenant_id, action="update_setting", key=key, value=_redact_setting_value(key, value))
     await db.commit()
-    return {"key": key, "value": body.value}
+    return {"key": key, "value": value}
+
+
+def _validate_setting(key: str, value: str) -> str:
+    """Keys with a fixed shape are checked here; everything else is free text."""
+    if key == "order_channel":
+        from app.agents.ordering import ORDER_CHANNELS
+
+        value = value.strip()
+        if value not in ORDER_CHANNELS:
+            raise HTTPException(status_code=422, detail=f"order_channel must be one of: {', '.join(ORDER_CHANNELS)}")
+    elif key == "website_url" and value.strip():
+        from app.catalog_sync.http import UnsafeURLError, normalize_site_url
+
+        try:
+            value = normalize_site_url(value)
+        except UnsafeURLError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return value
 
 
 @router.post("/admin/whatsapp/connect")
@@ -371,6 +390,121 @@ async def whatsapp_qr(tenant_id: int = Depends(get_authenticated_tenant_id)) -> 
             return Response(content=resp.content, media_type="image/png")
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"wa-bridge unreachable: {exc}") from exc
+
+
+class NotifyImage(BaseModel):
+    url: str
+    caption: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def public_url(cls, v: str) -> str:
+        v = v.strip()
+        if not v.startswith(("https://", "http://")):
+            raise ValueError("image url must be a public http(s) URL")
+        return v
+
+
+class NotifyBody(BaseModel):
+    to: str | list[str]
+    text: str
+    images: list[NotifyImage] = []
+
+    @field_validator("to")
+    @classmethod
+    def some_recipients(cls, v: str | list[str]) -> str | list[str]:
+        items = [v] if isinstance(v, str) else v
+        if not items or not any(str(i).strip() for i in items):
+            raise ValueError("at least one recipient is required")
+        if len(items) > _NOTIFY_MAX_RECIPIENTS:
+            raise ValueError(f"at most {_NOTIFY_MAX_RECIPIENTS} recipients per call")
+        return v
+
+    @field_validator("text")
+    @classmethod
+    def text_present(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("text cannot be empty")
+        if len(v) > 4096:
+            raise ValueError("text is longer than WhatsApp's 4096-character limit")
+        return v
+
+    @field_validator("images")
+    @classmethod
+    def at_most_ten(cls, v: list[NotifyImage]) -> list[NotifyImage]:
+        if len(v) > 10:
+            raise ValueError("at most 10 images per alert")
+        return v
+
+
+_NOTIFY_MAX_RECIPIENTS = 20
+# Per tenant: alerts are for a shop owner/staff, not bulk messaging.
+_NOTIFY_LIMIT = 30
+_NOTIFY_WINDOW_SECONDS = 60
+
+
+@router.post("/admin/notify")
+async def notify(
+    body: NotifyBody,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: int = Depends(get_authenticated_tenant_id),
+) -> dict:
+    """Send a business-initiated WhatsApp alert (text, then optional images) to the
+    shop's own numbers — e.g. "new website order" from the shop's website.
+
+    Skips the 24-hour service-window check (these are alerts the business sends to
+    itself), still never messages an opted-out number, creates no campaign and never
+    runs the sales agent. Each recipient is handled independently.
+    """
+    from app import rate_limit
+    from app.db.crud import get_or_create_customer
+    from app.logging_config import get_logger as _get_logger
+    from app.messaging.outbound import normalize_wa_id
+    from app.messaging.service import send_media_message, send_text_message
+
+    if not rate_limit.allow(f"notify:{tenant_id}", _NOTIFY_LIMIT, _NOTIFY_WINDOW_SECONDS):
+        raise HTTPException(status_code=429, detail="Too many alerts — try again in a minute")
+
+    log = _get_logger(__name__)
+    raw_numbers = [body.to] if isinstance(body.to, str) else body.to
+    results: list[dict] = []
+    seen: set[str] = set()
+    for raw in raw_numbers:
+        wa_id = normalize_wa_id(str(raw))
+        if not wa_id:
+            results.append({"to": raw, "status": "invalid_number"})
+            continue
+        if wa_id in seen:
+            continue
+        seen.add(wa_id)
+        entry: dict = {"to": raw, "wa_id": wa_id, "status": "error", "text": None, "images": []}
+        try:
+            customer, _ = await get_or_create_customer(db, wa_id, tenant_id=tenant_id)
+            text_result = await send_text_message(db, customer, body.text, bypass_window=True)
+            entry["text"] = text_result.status
+            if text_result.status != "sent":
+                entry["status"] = text_result.status  # e.g. opted_out
+                entry["detail"] = text_result.detail
+            else:
+                for img in body.images:
+                    try:
+                        r = await send_media_message(
+                            db, customer, "image", img.url, img.caption or "", bypass_window=True
+                        )
+                        entry["images"].append({"url": img.url, "status": r.status})
+                    except Exception as exc:
+                        entry["images"].append({"url": img.url, "status": "error", "detail": str(exc)[:200]})
+                all_ok = all(i["status"] == "sent" for i in entry["images"])
+                entry["status"] = "sent" if all_ok else "partial"
+            await db.commit()
+        except Exception as exc:
+            log.error("notify_recipient_failed", tenant_id=tenant_id, wa_id=wa_id, error=str(exc))
+            entry["status"] = "error"
+            entry["detail"] = str(exc)[:200]
+        results.append(entry)
+
+    sent = sum(1 for r in results if r["status"] in ("sent", "partial"))
+    return {"sent": sent, "failed": len(results) - sent, "results": results}
 
 
 @router.patch("/admin/products/{sku}/stock")

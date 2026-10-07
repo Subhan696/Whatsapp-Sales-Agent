@@ -17,6 +17,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from app.agents.ordering import is_website_link, website_refusal
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -138,6 +139,8 @@ async def flag_cancellation_pending(
         order_ref: The order reference, e.g. ORD-2026-0001.
                    Use last_order_ref from context if available.
     """
+    if is_website_link(state):
+        return website_refusal(state, "Cancelling an order")
     wa_id: str = state.get("wa_id", "")
     tenant_id: int = state.get("tenant_id") or 1
     try:
@@ -174,6 +177,8 @@ async def request_refund(
                    If unknown, pass "UNKNOWN".
         reason: The reason the customer gave for requesting a refund.
     """
+    if is_website_link(state):
+        return website_refusal(state, "Requesting a refund")
     customer_id: int | None = state.get("customer_id")
     tenant_id: int = state.get("tenant_id") or 1
     wa_id: str = state.get("wa_id", "")

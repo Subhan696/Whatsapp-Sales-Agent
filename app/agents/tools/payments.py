@@ -134,6 +134,10 @@ async def process_payment_receipt(
     Every receipt must be reviewed by an admin before the order is confirmed.
     Always returns PAYMENT_PENDING_REVIEW — tell the customer to wait.
     """
+    from app.agents.ordering import is_website_link, website_refusal
+
+    if is_website_link(state):
+        return website_refusal(state, "Verifying a payment screenshot")
     return await process_receipt_image(
         media_id,
         customer_id=state.get("customer_id"),

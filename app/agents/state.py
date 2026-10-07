@@ -80,3 +80,11 @@ class AgentState(TypedDict):
 
     # Formatted list of customer's active / upcoming bookings for context memory
     customer_active_bookings: str | None
+
+    # Where customers place orders: "whatsapp" (in chat) | "website_link"
+    # (agent sends product links; checkout happens on the shop's website).
+    # See app/agents/ordering.py.
+    order_channel: str | None
+    website_url: str | None
+    # Shop phone / contact the agent can offer for questions about website orders.
+    shop_contact: str | None

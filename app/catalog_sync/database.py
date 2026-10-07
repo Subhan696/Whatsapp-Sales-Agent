@@ -149,7 +149,7 @@ def _pick(row: dict, *keys: str) -> Any:
     return None
 
 
-def _variant_from_row(v: dict) -> dict[str, Any]:
+def _variant_from_row(v: dict, image_base_url: str | None = None) -> dict[str, Any]:
     opts: dict[str, str] = {}
     size = _pick(v, *FIELD_ALIASES["sizes"])
     color = _pick(v, *FIELD_ALIASES["colors"])
@@ -166,6 +166,8 @@ def _variant_from_row(v: dict) -> dict[str, Any]:
         available = stock > 0 if stock is not None else True
     price = to_decimal(_pick(v, *FIELD_ALIASES["price"]))
     compare = to_decimal(_pick(v, *FIELD_ALIASES["compare_at_price"]))
+    # The variant's OWN photo (e.g. design A vs design B), sent when a customer picks it.
+    own_images = _image_urls(_pick(v, "image", "image_url", "photo", "img", "thumbnail"), image_base_url)
     return {
         "name": str(_pick(v, "name", "title") or " / ".join(opts.values()) or _pick(v, "sku") or "Option"),
         "options": opts,
@@ -173,6 +175,7 @@ def _variant_from_row(v: dict) -> dict[str, Any]:
         "compare_at_price": str(compare.quantize(Decimal("0.01"))) if compare and price and compare > price else None,
         "sku": str(_pick(v, "sku")) if _pick(v, "sku") is not None else None,
         "available": bool(available),
+        "image": own_images[0] if own_images else None,
     }
 
 
@@ -212,7 +215,11 @@ def row_to_product(row: dict, mapping: dict[str, str], config: dict[str, Any]) -
         if colors:
             options["Color"] = colors
 
-    variants = [_variant_from_row(v) for v in _as_list(get("variants")) if isinstance(v, dict)]
+    variants = [
+        _variant_from_row(v, config.get("image_base_url"))
+        for v in _as_list(get("variants"))
+        if isinstance(v, dict)
+    ]
     for v in variants:
         for k, val in v["options"].items():
             options.setdefault(k, [])
