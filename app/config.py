@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     SHOPIFY_STORE_DOMAIN: str = ""
     SHOPIFY_ADMIN_API_TOKEN: str = ""
 
+    # Supabase (Al-Touheed Garments)
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+
     # LLM
     LLM_PROVIDER: Literal["anthropic", "openai"] = "anthropic"
     ANTHROPIC_API_KEY: str = ""

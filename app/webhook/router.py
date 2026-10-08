@@ -342,6 +342,23 @@ async def _process_message_background(
                     db, customer.id, tenant_id=tenant_id
                 )
                 last_order_summary = _format_order_summary(_latest_order) if _latest_order else None
+                if not last_order_summary:
+                    try:
+                        from app.supabase.client import SupabaseClient
+                        _sb_client = SupabaseClient()
+                        _sb_order = await _sb_client.get_order_status(phone=customer.wa_id)
+                        if _sb_order:
+                            _ord_num = _sb_order.get("order_number") or ""
+                            _st = _sb_order.get("order_status") or "pending"
+                            _tot = f"Rs. {round(float(_sb_order.get('total_amount') or 0)):,}"
+                            _items_raw = _sb_order.get("items") or []
+                            _items_parts = [f"{i.get('quantity', 1)}x {i.get('description', 'item')}" for i in _items_raw]
+                            _items_str = ", ".join(_items_parts) if _items_parts else "items"
+                            _addr = (_sb_order.get("shipping_address") or "").replace("\n", " ")
+                            last_order_ref = _ord_num
+                            last_order_summary = f"{_ord_num} | {_st} | {_items_str} | {_tot} | {_addr}"
+                    except Exception:
+                        pass
                 bank_transfer_details = await get_setting(
                     db, "bank_transfer_details", tenant_id=tenant_id
                 )

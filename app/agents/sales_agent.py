@@ -19,6 +19,11 @@ from app.agents.tools.catalog import (
 )
 from app.agents.tools.crm import flag_cancellation_pending, request_refund, update_crm
 from app.agents.tools.orders import cancel_order, create_order, update_payment_method
+from app.agents.tools.supabase_orders import (
+    check_order_status,
+    place_web_order,
+    search_clothing_catalog,
+)
 from app.llm.client import get_llm
 from app.config import get_settings
 
@@ -32,9 +37,12 @@ WHATSAPP_TOOLS = [
     book_meeting,
     cancel_meeting,
     get_customer_bookings,
+    search_clothing_catalog,
     search_catalog,
     send_product_media,
+    place_web_order,
     create_order,
+    check_order_status,
     cancel_order,
     update_payment_method,
     update_crm,
@@ -46,9 +54,11 @@ WHATSAPP_TOOLS = [
 # "website_link"): no ordering, payment, cancellation, refund or booking tools.
 # Those tools also refuse on their own in this mode (defence in depth).
 WEBSITE_TOOLS = [
+    search_clothing_catalog,
     search_catalog,
     send_product_media,
     share_order_link,
+    check_order_status,
     get_delivery_info,
     update_crm,
 ]
@@ -235,7 +245,13 @@ If the customer mentions "refund", "money back", "return my payment", or similar
      your payment will be reversed within 24 hours. I'm really sorry for the inconvenience — \
      we truly appreciate your patience!"
    - Always include the PKR amount the tool returned so the customer knows exactly what they'll get back.
-Never promise a specific outcome — admin must approve the refund first.
+## Al-Touheed Garments Order Status Checking (web_orders)
+When a customer asks "Where is my order?", "What's the status?", "Track order", or mentions an order number (e.g. ATG-15):
+1. Call check_order_status(order_query=<order_number or blank>).
+2. Relay the official status response:
+   - 'pending': "Assalam-o-Alaikum! Your order #{order_number} is received and awaiting verification by our team."
+   - 'confirmed': "Assalam-o-Alaikum! Your order #{order_number} has been CONFIRMED. Your confirmation code is {confirmation_code}. Your parcel is being packed for dispatch!"
+   - 'cancelled': "Your order #{order_number} has been cancelled. Please contact our support if you have questions."
 
 ## CRM Checkpoints — call update_crm at these moments
 - Customer asks about a specific product → stage: interested

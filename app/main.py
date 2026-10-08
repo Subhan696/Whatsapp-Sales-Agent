@@ -13,6 +13,7 @@ from app.analytics.router import router as analytics_router
 from app.auth.router import router as auth_router
 from app.webhook.router import router as webhook_router
 from app.webhook.bridge import router as wa_bridge_router
+from app.supabase.router import router as supabase_router
 
 
 async def _auto_cancel_stale_pending() -> None:
@@ -113,6 +114,10 @@ async def lifespan(app: FastAPI):
             from app.catalog_sync.realtime import realtime_manager_loop
 
             background.append(asyncio.create_task(realtime_manager_loop()))
+
+    # Supabase Realtime Order Listener for Al-Touheed Garments (web_orders)
+    from app.supabase.realtime_orders import web_orders_realtime_loop
+    background.append(asyncio.create_task(web_orders_realtime_loop()))
     try:
         yield
     finally:
@@ -162,6 +167,7 @@ app.include_router(wa_bridge_router)
 app.include_router(analytics_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(supabase_router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
