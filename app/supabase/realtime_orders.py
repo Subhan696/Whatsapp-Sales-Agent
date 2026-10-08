@@ -224,7 +224,7 @@ async def handle_order_update_event(
     logger.info(
         "web_orders_event_received",
         tenant_id=tenant_id,
-        event=event_type,
+        event_type=event_type,
         order_number=record.get("order_number"),
         old_status=old_status,
         new_status=new_status,
