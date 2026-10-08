@@ -64,6 +64,134 @@ async def _already_sent_order_alert(db, tenant_id: int, order_number: str, alert
     return False
 
 
+def _parse_order_items(raw_items: Any) -> list[dict[str, Any]]:
+    """Safely parse order items into a list of dicts."""
+    if not raw_items:
+        return []
+    if isinstance(raw_items, str):
+        try:
+            parsed = json.loads(raw_items)
+            if isinstance(parsed, list):
+                return [i for i in parsed if isinstance(i, dict)]
+            if isinstance(parsed, dict):
+                return [parsed]
+        except Exception:
+            return []
+    elif isinstance(raw_items, list):
+        return [i for i in raw_items if isinstance(i, dict)]
+    elif isinstance(raw_items, dict):
+        return [raw_items]
+    return []
+
+
+def _format_order_items_text(items: list[dict[str, Any]]) -> str:
+    """Format itemized list with product name, size, variant, quantity, and price."""
+    if not items:
+        return ""
+    lines = ["📦 *Ordered Items:*"]
+    for idx, item in enumerate(items, 1):
+        name = (item.get("name") or item.get("title") or f"Item {idx}").strip()
+        size = (item.get("size") or "").strip()
+        variant = (item.get("variant") or item.get("variantLabel") or item.get("color") or "").strip()
+        try:
+            qty = int(item.get("quantity") or item.get("qty") or 1)
+        except (ValueError, TypeError):
+            qty = 1
+        try:
+            price = round(float(item.get("price") or 0))
+        except (ValueError, TypeError):
+            price = 0
+
+        details = []
+        if size:
+            details.append(f"Size: {size}")
+        if variant and variant.lower() not in ("standard", "default", "none"):
+            details.append(f"Variant: {variant}")
+
+        detail_str = f" ({', '.join(details)})" if details else ""
+        price_str = f" × Rs. {price:,}" if price else ""
+        lines.append(f"• *{name}*{detail_str}")
+        lines.append(f"   Qty: {qty}{price_str}")
+    return "\n".join(lines)
+
+
+def _format_order_delivery_text(order: dict[str, Any]) -> str:
+    """Format shipping address and payment method."""
+    address = (order.get("shipping_address") or "").strip()
+    city = (order.get("city") or "").strip()
+
+    full_address = ""
+    if address and city and city.lower() not in address.lower():
+        full_address = f"{address}, {city}"
+    elif address:
+        full_address = address
+    elif city:
+        full_address = city
+
+    parts = []
+    if full_address:
+        parts.append(f"📍 *Delivery Address:* {full_address}")
+
+    raw_pm = (order.get("payment_method") or "").strip()
+    if raw_pm:
+        pm = raw_pm.split("|")[0].strip()
+        if pm:
+            parts.append(f"💳 *Payment:* {pm.title()}")
+
+    return "\n".join(parts)
+
+
+async def _send_order_variant_images(db, customer, items: list[dict[str, Any]], tenant_id: int = 1) -> int:
+    """Send product variant photos for each item in the order with item name, size, and variant."""
+    from app.messaging.service import send_media_message
+
+    sent_count = 0
+    seen_urls = set()
+    # Send up to 5 items to keep the message clean and fast
+    for item in items[:5]:
+        img_url = item.get("image") or item.get("image_url") or item.get("imageUrl")
+        if not img_url or not isinstance(img_url, str) or not img_url.startswith("http"):
+            continue
+        if img_url in seen_urls:
+            continue
+        seen_urls.add(img_url)
+
+        name = (item.get("name") or item.get("title") or "Item").strip()
+        size = (item.get("size") or "").strip()
+        variant = (item.get("variant") or item.get("variantLabel") or item.get("color") or "").strip()
+
+        caption_lines = [f"📸 *{name}*"]
+        specs = []
+        if size:
+            specs.append(f"Size: {size}")
+        if variant and variant.lower() not in ("standard", "default", "none"):
+            specs.append(f"Variant: {variant}")
+        if specs:
+            caption_lines.append(f"📏 {', '.join(specs)}")
+
+        caption = "\n".join(caption_lines)
+        try:
+            await send_media_message(
+                db,
+                customer,
+                media_type="image",
+                link=img_url,
+                caption=caption,
+                bypass_window=True,
+            )
+            sent_count += 1
+            await asyncio.sleep(0.7)
+        except Exception as exc:
+            logger.warning(
+                "order_variant_image_send_failed",
+                tenant_id=tenant_id,
+                item=name,
+                image_url=img_url,
+                error=str(exc),
+            )
+    return sent_count
+
+
 async def _get_tenant_store_name(db, tenant_id: int) -> str:
     from app.db.models import Tenant
     try:
@@ -103,15 +231,26 @@ async def send_order_confirmation_whatsapp(order: dict[str, Any], tenant_id: int
                 return True
 
             store_name = await _get_tenant_store_name(db, tenant_id)
+            items = _parse_order_items(order.get("items"))
+            items_text = _format_order_items_text(items)
+            delivery_text = _format_order_delivery_text(order)
 
-            message_body = (
+            sections = [
                 f"Assalam-o-Alaikum{name_str}!\n\n"
                 f"🎉 Great news! Your order *#{order_number}* at {store_name} is *CONFIRMED*.\n\n"
                 f"🔐 *Confirmation Code:* {code}\n"
-                f"💰 *Total Amount:* Rs. {total:,}\n\n"
+                f"💰 *Total Amount:* Rs. {total:,}"
+            ]
+            if items_text:
+                sections.append(items_text)
+            if delivery_text:
+                sections.append(delivery_text)
+            sections.append(
                 "Please keep this confirmation code safe. You may need it upon parcel delivery. "
                 "Thank you for shopping with us!"
             )
+
+            message_body = "\n\n".join(sections)
 
             customer, _ = await get_or_create_customer(
                 db,
@@ -128,6 +267,9 @@ async def send_order_confirmation_whatsapp(order: dict[str, Any], tenant_id: int
             await db.commit()
             if result.status == "sent":
                 _sent_order_alerts.add((tenant_id, str(order_number).strip(), "confirmed"))
+                if items:
+                    await _send_order_variant_images(db, customer, items, tenant_id=tenant_id)
+                    await db.commit()
             logger.info(
                 "order_confirmation_whatsapp_sent",
                 tenant_id=tenant_id,
@@ -173,13 +315,22 @@ async def send_order_pending_whatsapp(order: dict[str, Any], tenant_id: int = 1)
                 return True
 
             store_name = await _get_tenant_store_name(db, tenant_id)
+            items = _parse_order_items(order.get("items"))
+            items_text = _format_order_items_text(items)
+            delivery_text = _format_order_delivery_text(order)
 
-            message_body = (
+            sections = [
                 f"Assalam-o-Alaikum{name_str}!\n\n"
-                f"Thank you for your order *#{order_number}* at {store_name}. "
-                f"Your order (Total: Rs. {total:,}) has been received and is currently *PENDING* verification. "
-                "Our team will notify you here as soon as it is confirmed!"
-            )
+                f"Thank you for your order *#{order_number}* at {store_name}.\n"
+                f"Your order (Total: Rs. {total:,}) has been received and is currently *PENDING* verification."
+            ]
+            if items_text:
+                sections.append(items_text)
+            if delivery_text:
+                sections.append(delivery_text)
+            sections.append("Our team will notify you here as soon as it is confirmed!")
+
+            message_body = "\n\n".join(sections)
 
             customer, _ = await get_or_create_customer(
                 db,
@@ -196,6 +347,9 @@ async def send_order_pending_whatsapp(order: dict[str, Any], tenant_id: int = 1)
             await db.commit()
             if result.status == "sent":
                 _sent_order_alerts.add((tenant_id, str(order_number).strip(), "pending"))
+                if items:
+                    await _send_order_variant_images(db, customer, items, tenant_id=tenant_id)
+                    await db.commit()
             logger.info(
                 "order_pending_whatsapp_sent",
                 tenant_id=tenant_id,
