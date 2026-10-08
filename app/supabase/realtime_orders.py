@@ -412,6 +412,170 @@ async def send_order_cancelled_whatsapp(order: dict[str, Any], tenant_id: int = 
         return False
 
 
+async def _get_admin_notification_phone(db, tenant_id: int) -> str:
+    """Retrieve the configured admin WhatsApp phone number for order alerts."""
+    from app.db.crud import get_setting
+    from app.db.models import Tenant
+
+    # 1. Dedicated admin order phone setting
+    phone = await get_setting(db, "admin_order_phone", tenant_id=tenant_id)
+    if phone and phone.strip():
+        norm = normalize_pk_phone(phone.strip())
+        if norm:
+            return norm
+
+    # 2. Shop contact setting
+    phone = await get_setting(db, "shop_contact", tenant_id=tenant_id)
+    if phone and phone.strip():
+        norm = normalize_pk_phone(phone.strip())
+        if norm:
+            return norm
+
+    # 3. Tenant's registered whatsapp number
+    try:
+        tenant = await db.get(Tenant, tenant_id)
+        if tenant and tenant.whatsapp_number:
+            norm = normalize_pk_phone(tenant.whatsapp_number)
+            if norm:
+                return norm
+    except Exception:
+        pass
+
+    return ""
+
+
+async def send_order_admin_notification_whatsapp(order: dict[str, Any], tenant_id: int = 1) -> bool:
+    """Send comprehensive order alert to the store admin WhatsApp number."""
+    order_number = order.get("order_number") or "—"
+    try:
+        from app.db.base import get_session_factory
+        from app.db.crud import get_or_create_customer
+        from app.messaging.service import send_outbound_to_customer
+
+        factory = get_session_factory()
+        async with factory() as db:
+            if await _already_sent_order_alert(db, tenant_id, order_number, "admin_alert"):
+                logger.info("order_admin_alert_already_sent", tenant_id=tenant_id, order_number=order_number)
+                return True
+
+            admin_phone = await _get_admin_notification_phone(db, tenant_id)
+            if not admin_phone:
+                logger.warning(
+                    "no_admin_phone_configured_for_alert",
+                    tenant_id=tenant_id,
+                    order_number=order_number,
+                )
+                return False
+
+            store_name = await _get_tenant_store_name(db, tenant_id)
+            customer_name = (order.get("customer_name") or "Online Customer").strip()
+            raw_cust_phone = (order.get("customer_phone") or "").strip()
+            cust_phone_clean = normalize_pk_phone(raw_cust_phone)
+            cust_phone_display = raw_cust_phone or cust_phone_clean or "Not provided"
+            wa_link = f"https://wa.me/{cust_phone_clean}" if cust_phone_clean else ""
+            cust_email = (order.get("customer_email") or "").strip()
+            code = order.get("confirmation_code") or "—"
+            status = (order.get("order_status") or "pending").upper()
+
+            try:
+                total = round(float(order.get("total_amount") or 0))
+            except (ValueError, TypeError):
+                total = 0
+
+            # Items
+            items = _parse_order_items(order.get("items"))
+            items_text = _format_order_items_text(items)
+
+            # Address & GPS Pin Location
+            address = (order.get("shipping_address") or "").strip()
+            city = (order.get("city") or "").strip()
+            full_address = (
+                f"{address}, {city}"
+                if (address and city and city.lower() not in address.lower())
+                else (address or city or "Not provided")
+            )
+
+            pin_line = ""
+            try:
+                lat = float(order.get("delivery_lat") or 0)
+                lng = float(order.get("delivery_lng") or 0)
+                if lat != 0 and lng != 0:
+                    pin_line = f"\n📌 *GPS Pin Location:*\nhttps://www.google.com/maps?q={lat:.6f},{lng:.6f}"
+            except (ValueError, TypeError):
+                pass
+
+            # Payment & Receipt screenshot
+            raw_pm = (order.get("payment_method") or "").strip()
+            payment_method = raw_pm.split("|")[0].strip() if raw_pm else "Not specified"
+            receipt_url = (order.get("stripe_payment_id") or "").strip()
+            if not receipt_url and "http" in raw_pm:
+                for part in raw_pm.split():
+                    if part.startswith("http"):
+                        receipt_url = part.rstrip(",;)")
+                        break
+
+            receipt_line = (
+                f"\n📎 *Payment Receipt:* {receipt_url}"
+                if receipt_url and receipt_url.startswith("http")
+                else ""
+            )
+
+            sections = [
+                "🚨 *NEW ORDER RECEIVED!*",
+                f"🏪 *Store:* {store_name}\n"
+                f"🧾 *Order Number:* #{order_number}\n"
+                f"🔐 *Confirmation Code:* {code}\n"
+                f"📊 *Status:* {status}\n"
+                f"💰 *Total Amount:* Rs. {total:,}",
+                "👤 *Customer Details:*\n"
+                f"• *Name:* {customer_name}\n"
+                f"• *Phone:* {cust_phone_display}"
+                + (f" ({wa_link})" if wa_link else "")
+                + (f"\n• *Email:* {cust_email}" if cust_email else ""),
+                f"📍 *Delivery Address:*\n{full_address}{pin_line}",
+                f"💳 *Payment:*\n• Method: {payment_method.title()}{receipt_line}",
+            ]
+            if items_text:
+                sections.append(items_text)
+
+            message_body = "\n\n".join(sections)
+
+            admin_customer, _ = await get_or_create_customer(
+                db,
+                wa_id=admin_phone,
+                name="Store Admin",
+                tenant_id=tenant_id,
+            )
+            result = await send_outbound_to_customer(
+                db,
+                admin_customer,
+                message_body,
+                bypass_window=True,
+            )
+            await db.commit()
+            if result.status == "sent":
+                _sent_order_alerts.add((tenant_id, str(order_number).strip(), "admin_alert"))
+                if items:
+                    await _send_order_variant_images(db, admin_customer, items, tenant_id=tenant_id)
+                    await db.commit()
+            logger.info(
+                "order_admin_notification_whatsapp_sent",
+                tenant_id=tenant_id,
+                admin_phone=admin_phone,
+                order_number=order_number,
+                status=result.status,
+            )
+            return result.status == "sent"
+    except Exception as exc:
+        logger.error(
+            "order_admin_notification_whatsapp_error",
+            tenant_id=tenant_id,
+            order_number=order_number,
+            error=str(exc),
+        )
+        return False
+
+
 async def handle_order_update_event(
     record: dict[str, Any],
     old_record: dict[str, Any] | None = None,
@@ -437,11 +601,17 @@ async def handle_order_update_event(
 
     # 2. 'confirmed' — send confirmation message with confirmation code
     if new_status == "confirmed":
-        return await send_order_confirmation_whatsapp(record, tenant_id=tenant_id)
+        cust_ok = await send_order_confirmation_whatsapp(record, tenant_id=tenant_id)
+        # Ensure admin alert was sent as well
+        await send_order_admin_notification_whatsapp(record, tenant_id=tenant_id)
+        return cust_ok
 
     # 3. 'pending' — order placed by customer, awaiting store verification
     if new_status == "pending":
-        return await send_order_pending_whatsapp(record, tenant_id=tenant_id)
+        cust_ok = await send_order_pending_whatsapp(record, tenant_id=tenant_id)
+        # Notify store admin instantly with all details, address, GPS pin & photos!
+        await send_order_admin_notification_whatsapp(record, tenant_id=tenant_id)
+        return cust_ok
 
     # 4. 'cancelled' — order cancelled
     if new_status == "cancelled":

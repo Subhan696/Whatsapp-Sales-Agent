@@ -1312,7 +1312,7 @@ function updateUrduUI(enabled, mode) {
 }
 
 async function loadSettings() {
-  const keys = ['business_name', 'business_description', 'delivery_charge', 'delivery_estimate_days', 'bank_transfer_details', 'urdu_enabled', 'agent_language', 'agent_active', 'agent_mode', 'business_knowledge', 'services_offered', 'working_hours', 'meeting_types', 'custom_instructions', 'order_channel', 'website_url', 'shop_contact'];
+  const keys = ['business_name', 'business_description', 'delivery_charge', 'delivery_estimate_days', 'bank_transfer_details', 'urdu_enabled', 'agent_language', 'agent_active', 'agent_mode', 'business_knowledge', 'services_offered', 'working_hours', 'meeting_types', 'custom_instructions', 'order_channel', 'website_url', 'shop_contact', 'admin_order_phone'];
   try {
     const results = await Promise.all(keys.map((k) => safeFetch('/admin/settings/' + k)));
     const m = {};
@@ -1335,6 +1335,7 @@ async function loadSettings() {
     $('setting-custom-instructions').value = m.custom_instructions;
     $('setting-website-url').value = m.website_url;
     $('setting-shop-contact').value = m.shop_contact;
+    if ($('setting-admin-order-phone')) $('setting-admin-order-phone').value = m.admin_order_phone;
     updateOrderChannelUI(m.order_channel === 'website_link');
   } catch (e) { toast('Could not load settings: ' + e.message, 'error'); }
 }
