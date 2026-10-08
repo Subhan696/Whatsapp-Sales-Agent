@@ -53,37 +53,7 @@ async def supabase_orders_webhook(request: Request) -> dict[str, Any]:
         phone=customer_phone,
     )
 
-    notified = False
-    if event_type == "UPDATE":
-        notified = await handle_order_update_event(record, old_record)
-    elif event_type == "INSERT":
-        # New order placed on website
-        phone = normalize_pk_phone(customer_phone)
-        if phone:
-            name = record.get("customer_name") or ""
-            name_str = f" {name.strip()}" if name.strip() else ""
-            msg = (
-                f"Assalam-o-Alaikum{name_str}!\n\n"
-                f"Thank you for your order *#{order_number}* at Al-Touheed Garments. "
-                "Your order has been received and is awaiting verification by our team. "
-                "We will notify you as soon as it is confirmed!"
-            )
-            try:
-                from app.db.base import get_session_factory
-                from app.db.crud import get_or_create_customer
-                from app.messaging.service import send_outbound_to_customer
-
-                factory = get_session_factory()
-                async with factory() as db:
-                    async with db.begin():
-                        customer, _ = await get_or_create_customer(
-                            db, wa_id=phone, name=name if name else None, tenant_id=1
-                        )
-                    async with db.begin():
-                        res = await send_outbound_to_customer(db, customer, msg, bypass_window=True)
-                        notified = res.status == "sent"
-            except Exception as exc:
-                logger.error("order_placed_whatsapp_error", error=str(exc))
+    notified = await handle_order_update_event(record, old_record, event_type=event_type)
 
     return {
         "status": "ok",

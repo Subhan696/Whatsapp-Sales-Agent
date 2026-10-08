@@ -191,23 +191,100 @@ async def get_orders_page(
     rows = await db.execute(q.limit(per_page).offset(offset))
     orders = rows.scalars().unique().all()
 
+    orders_list: list[OrderSummary] = [
+        OrderSummary(
+            id=o.id,
+            order_ref=o.order_ref,
+            customer_wa_id=o.customer.wa_id if o.customer else "",
+            customer_name=o.customer.name if o.customer else None,
+            payment_method=o.payment_method,
+            delivery_address=o.delivery_address,
+            status=o.status.value if o.status else "unknown",
+            total=o.total,
+            line_items=o.line_items or [],
+            created_at=o.created_at,
+        )
+        for o in orders
+    ]
+    seen_refs = {o.order_ref for o in orders_list}
+
+    # Fetch live orders from Supabase web_orders if connected
+    try:
+        import httpx
+        from app.supabase.client import get_supabase_credentials
+        sb_url, sb_key = await get_supabase_credentials(tenant_id=tenant_id)
+        if sb_url and sb_key:
+            endpoint = f"{sb_url}/rest/v1/web_orders"
+            headers = {"apikey": sb_key, "Authorization": f"Bearer {sb_key}", "Accept": "application/json"}
+            sb_params: dict[str, Any] = {"select": "*", "order": "created_at.desc", "limit": per_page}
+            if status:
+                sb_params["order_status"] = f"eq.{status}"
+            if payment_method:
+                sb_params["payment_method"] = f"eq.{payment_method}"
+
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get(endpoint, params=sb_params, headers=headers)
+                if r.status_code in (200, 206):
+                    sb_rows = r.json()
+                    if isinstance(sb_rows, list):
+                        for row in sb_rows:
+                            ref = row.get("order_number") or f"ATG-{row.get('id', 'WEB')}"
+                            if ref in seen_refs:
+                                continue
+                            seen_refs.add(ref)
+
+                            raw_dt = row.get("created_at")
+                            try:
+                                dt = datetime.fromisoformat(raw_dt.replace("Z", "+00:00")) if raw_dt else _now()
+                            except Exception:
+                                dt = _now()
+
+                            # Map items to display cleanly
+                            raw_items = row.get("items") or []
+                            norm_items = []
+                            for it in raw_items:
+                                norm_items.append({
+                                    "name": it.get("description") or it.get("name") or it.get("item_code") or "Item",
+                                    "sku": it.get("item_code") or it.get("sku") or "",
+                                    "quantity": it.get("quantity", 1),
+                                    "unit_price": str(it.get("sale_rate", it.get("price", 0))),
+                                    "size": it.get("size", ""),
+                                })
+
+                            addr_parts = [row.get("shipping_address") or "", row.get("city") or ""]
+                            full_addr = ", ".join(p.strip() for p in addr_parts if p.strip()) or None
+
+                            orders_list.append(
+                                OrderSummary(
+                                    id=hash(ref) % 10000000,
+                                    order_ref=ref,
+                                    customer_wa_id=row.get("customer_phone") or "",
+                                    customer_name=row.get("customer_name") or None,
+                                    payment_method=row.get("payment_method") or "cod",
+                                    delivery_address=full_addr,
+                                    status=row.get("order_status") or "pending",
+                                    total=Decimal(str(row.get("total_amount") or 0)),
+                                    line_items=norm_items,
+                                    created_at=dt,
+                                )
+                            )
+    except Exception as exc:
+        from app.logging import get_logger
+        get_logger(__name__).warning("supabase_orders_fetch_failed", error=str(exc))
+
+    def _to_utc(dt_val: datetime | None) -> datetime:
+        if dt_val is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if dt_val.tzinfo is None:
+            return dt_val.replace(tzinfo=timezone.utc)
+        return dt_val.astimezone(timezone.utc)
+
+    # Sort merged list newest first
+    orders_list.sort(key=lambda o: _to_utc(o.created_at), reverse=True)
+
     return OrderPageResponse(
-        orders=[
-            OrderSummary(
-                id=o.id,
-                order_ref=o.order_ref,
-                customer_wa_id=o.customer.wa_id if o.customer else "",
-                customer_name=o.customer.name if o.customer else None,
-                payment_method=o.payment_method,
-                delivery_address=o.delivery_address,
-                status=o.status.value if o.status else "unknown",
-                total=o.total,
-                line_items=o.line_items or [],
-                created_at=o.created_at,
-            )
-            for o in orders
-        ],
-        total=total,
+        orders=orders_list[:per_page],
+        total=max(total, len(orders_list)),
         page=page,
         per_page=per_page,
         generated_at=_now(),

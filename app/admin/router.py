@@ -874,8 +874,10 @@ async def add_catalog_source(
 
 def _reconcile_realtime() -> None:
     from app.catalog_sync.realtime import request_reconcile
+    from app.supabase.realtime_orders import request_orders_realtime_reconcile
 
     request_reconcile()
+    request_orders_realtime_reconcile()
 
 
 @router.patch("/admin/catalog/sources/{source_id}")

@@ -36,27 +36,39 @@ def normalize_pk_phone(phone: str | None) -> str:
     return digits
 
 
-async def get_supabase_credentials(tenant_id: int = 1) -> tuple[str, str]:
-    """Retrieve Supabase Project URL and API Key.
+def _get_jwt_role(token: str) -> str | None:
+    try:
+        parts = token.split(".")
+        if len(parts) >= 2:
+            import base64
+            import json
+            payload_b64 = parts[1]
+            payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
+            data = json.loads(base64.urlsafe_b64decode(payload_b64.encode()))
+            return data.get("role")
+    except Exception:
+        pass
+    return None
 
-    Priority:
-    1. Settings.SUPABASE_URL and Settings.SUPABASE_SERVICE_ROLE_KEY or Settings.SUPABASE_KEY
-    2. Decrypted secret and URL from catalog_sources table in local database
+
+async def get_supabase_credentials(tenant_id: int = 1) -> tuple[str, str]:
+    """Retrieve Supabase Project URL and API Key for a specific tenant.
+
+    Multi-tenant priority:
+    1. Tenant's connected source in catalog_sources table (from Admin Dashboard Products page)
+    2. Optional developer fallback from settings (Settings.SUPABASE_URL and Settings.SUPABASE_SERVICE_ROLE_KEY)
     """
     settings = get_settings()
-    url = (settings.SUPABASE_URL or "").strip().rstrip("/")
-    key = (settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY or "").strip()
 
-    if url and key:
-        return url, key
-
-    # Check CatalogSource table in database
+    # 1. Primary: Look up this tenant's connected Supabase source in database
     try:
-        from app.db.base import get_session_factory
+        from app.db.base import _engine, init_engine, get_session_factory
         from app.db.models import CatalogSource
         from app.crypto import decrypt
         from sqlalchemy import select
 
+        if _engine is None:
+            init_engine(settings.DATABASE_URL)
         factory = get_session_factory()
         async with factory() as db:
             result = await db.execute(
@@ -64,38 +76,63 @@ async def get_supabase_credentials(tenant_id: int = 1) -> tuple[str, str]:
                     CatalogSource.tenant_id == tenant_id,
                     CatalogSource.kind == "supabase",
                     CatalogSource.enabled.is_(True),
-                )
+                ).order_by(CatalogSource.id.desc())
             )
-            source = result.scalars().first()
-            if source:
-                db_url = (source.url or "").strip().rstrip("/")
-                # url in catalog_sources might be display url or project url
-                if "/rest/v1" in db_url:
-                    db_url = db_url.split("/rest/v1")[0]
+            sources = result.scalars().all()
+            for source in sources:
+                db_url = ""
+                if source.config and isinstance(source.config, dict) and source.config.get("project_url"):
+                    db_url = str(source.config.get("project_url")).strip().rstrip("/")
+                elif source.url:
+                    raw_url = source.url.strip().rstrip("/")
+                    db_url = raw_url.split("/rest/v1")[0] if "/rest/v1" in raw_url else raw_url
+
                 db_key = decrypt(source.secret) if source.secret else ""
+
                 if db_url and db_key:
+                    role = _get_jwt_role(db_key)
+                    if role == "anon":
+                        logger.warning(
+                            "supabase_key_is_anon_role",
+                            tenant_id=tenant_id,
+                            role=role,
+                            hint=(
+                                f"Tenant {tenant_id} connected Supabase using an 'anon' key. "
+                                "web_orders has Row Level Security (RLS) enabled, so anon key cannot "
+                                "fetch orders or receive Realtime updates. Please connect using your service_role key."
+                            ),
+                        )
                     return db_url, db_key
     except Exception as exc:
-        logger.warning("supabase_credentials_db_lookup_failed", error=str(exc))
+        logger.warning("supabase_credentials_db_lookup_failed", tenant_id=tenant_id, error=str(exc))
 
+    # 2. Fallback: only for local dev / single-tenant testing if not found in DB
+    url = (settings.SUPABASE_URL or "").strip().rstrip("/")
+    key = (settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY or "").strip()
     return url, key
 
 
 class SupabaseClient:
     """Async client communicating with Supabase PostgREST & RPC endpoints."""
 
-    def __init__(self, project_url: str | None = None, api_key: str | None = None):
+    def __init__(
+        self,
+        project_url: str | None = None,
+        api_key: str | None = None,
+        tenant_id: int = 1,
+    ):
         self._project_url = project_url
         self._api_key = api_key
+        self._tenant_id = tenant_id
 
     async def _resolve_credentials(self) -> tuple[str, str]:
         if self._project_url and self._api_key:
             return self._project_url, self._api_key
-        url, key = await get_supabase_credentials()
+        url, key = await get_supabase_credentials(tenant_id=self._tenant_id)
         if not url or not key:
             raise RuntimeError(
-                "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_KEY in .env "
-                "or connect Supabase in the Admin Dashboard."
+                f"Supabase is not configured for tenant {self._tenant_id}. "
+                "Please connect Supabase in the Admin Dashboard (Products -> Connect source)."
             )
         return url, key
 
