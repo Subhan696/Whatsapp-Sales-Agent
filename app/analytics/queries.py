@@ -214,7 +214,8 @@ async def get_orders_page(
         from app.supabase.client import get_supabase_credentials
         sb_url, sb_key = await get_supabase_credentials(tenant_id=tenant_id)
         if sb_url and sb_key:
-            endpoint = f"{sb_url}/rest/v1/web_orders"
+            clean_sb_url = sb_url.split("/rest/v1")[0].rstrip("/") if "/rest/v1" in sb_url else sb_url.rstrip("/")
+            endpoint = f"{clean_sb_url}/rest/v1/web_orders"
             headers = {"apikey": sb_key, "Authorization": f"Bearer {sb_key}", "Accept": "application/json"}
             sb_params: dict[str, Any] = {"select": "*", "order": "created_at.desc", "limit": per_page}
             if status:

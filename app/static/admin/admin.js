@@ -76,7 +76,16 @@ function emptyRow(cols, title, text, iconName = 'package') {
 function loadingRow(cols) { return `<tr><td class="empty-cell" colspan="${cols}"><div class="empty-state"><span class="spinner"></span></div></td></tr>`; }
 
 function status_badge(s) {
-  const map = { draft: ['', 'Draft'], awaiting_payment: ['warning', 'Awaiting payment'], pending_delivery: ['info', 'Pending delivery'], paid: ['success', 'Paid'], cancelled: ['danger', 'Cancelled'] };
+  const map = {
+    draft: ['', 'Draft'],
+    awaiting_payment: ['warning', 'Awaiting payment'],
+    pending_delivery: ['info', 'Pending delivery'],
+    paid: ['success', 'Paid'],
+    cancelled: ['danger', 'Cancelled'],
+    confirmed: ['success', 'Confirmed'],
+    pending: ['warning', 'Pending'],
+    expired: ['danger', 'Expired'],
+  };
   const [tone, label] = map[s] || ['', s];
   return badge(label, tone);
 }

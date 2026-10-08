@@ -84,8 +84,10 @@ async def get_supabase_credentials(tenant_id: int = 1) -> tuple[str, str]:
                 if source.config and isinstance(source.config, dict) and source.config.get("project_url"):
                     db_url = str(source.config.get("project_url")).strip().rstrip("/")
                 elif source.url:
-                    raw_url = source.url.strip().rstrip("/")
-                    db_url = raw_url.split("/rest/v1")[0] if "/rest/v1" in raw_url else raw_url
+                    db_url = source.url.strip().rstrip("/")
+
+                if "/rest/v1" in db_url:
+                    db_url = db_url.split("/rest/v1")[0].rstrip("/")
 
                 db_key = decrypt(source.secret) if source.secret else ""
 
