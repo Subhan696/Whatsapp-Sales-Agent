@@ -76,28 +76,27 @@ async def send_order_confirmation_whatsapp(order: dict[str, Any], tenant_id: int
                 "Thank you for shopping with us!"
             )
 
-            async with db.begin():
-                customer, _ = await get_or_create_customer(
-                    db,
-                    wa_id=phone,
-                    name=name if name else None,
-                    tenant_id=tenant_id,
-                )
-            async with db.begin():
-                result = await send_outbound_to_customer(
-                    db,
-                    customer,
-                    message_body,
-                    bypass_window=True,
-                )
-                logger.info(
-                    "order_confirmation_whatsapp_sent",
-                    tenant_id=tenant_id,
-                    phone=phone,
-                    order_number=order_number,
-                    status=result.status,
-                )
-                return result.status == "sent"
+            customer, _ = await get_or_create_customer(
+                db,
+                wa_id=phone,
+                name=name if name else None,
+                tenant_id=tenant_id,
+            )
+            result = await send_outbound_to_customer(
+                db,
+                customer,
+                message_body,
+                bypass_window=True,
+            )
+            await db.commit()
+            logger.info(
+                "order_confirmation_whatsapp_sent",
+                tenant_id=tenant_id,
+                phone=phone,
+                order_number=order_number,
+                status=result.status,
+            )
+            return result.status == "sent"
     except Exception as exc:
         logger.error(
             "order_confirmation_whatsapp_error",
@@ -139,28 +138,27 @@ async def send_order_pending_whatsapp(order: dict[str, Any], tenant_id: int = 1)
                 "Our team will notify you here as soon as it is confirmed!"
             )
 
-            async with db.begin():
-                customer, _ = await get_or_create_customer(
-                    db,
-                    wa_id=phone,
-                    name=name if name else None,
-                    tenant_id=tenant_id,
-                )
-            async with db.begin():
-                result = await send_outbound_to_customer(
-                    db,
-                    customer,
-                    message_body,
-                    bypass_window=True,
-                )
-                logger.info(
-                    "order_pending_whatsapp_sent",
-                    tenant_id=tenant_id,
-                    phone=phone,
-                    order_number=order_number,
-                    status=result.status,
-                )
-                return result.status == "sent"
+            customer, _ = await get_or_create_customer(
+                db,
+                wa_id=phone,
+                name=name if name else None,
+                tenant_id=tenant_id,
+            )
+            result = await send_outbound_to_customer(
+                db,
+                customer,
+                message_body,
+                bypass_window=True,
+            )
+            await db.commit()
+            logger.info(
+                "order_pending_whatsapp_sent",
+                tenant_id=tenant_id,
+                phone=phone,
+                order_number=order_number,
+                status=result.status,
+            )
+            return result.status == "sent"
     except Exception as exc:
         logger.error("order_pending_whatsapp_error", tenant_id=tenant_id, error=str(exc))
         return False
@@ -191,21 +189,20 @@ async def send_order_cancelled_whatsapp(order: dict[str, Any], tenant_id: int = 
                 "If you have any questions or this was done in error, please reply to this message."
             )
 
-            async with db.begin():
-                customer, _ = await get_or_create_customer(
-                    db,
-                    wa_id=phone,
-                    name=name if name else None,
-                    tenant_id=tenant_id,
-                )
-            async with db.begin():
-                result = await send_outbound_to_customer(
-                    db,
-                    customer,
-                    message_body,
-                    bypass_window=True,
-                )
-                return result.status == "sent"
+            customer, _ = await get_or_create_customer(
+                db,
+                wa_id=phone,
+                name=name if name else None,
+                tenant_id=tenant_id,
+            )
+            result = await send_outbound_to_customer(
+                db,
+                customer,
+                message_body,
+                bypass_window=True,
+            )
+            await db.commit()
+            return result.status == "sent"
     except Exception as exc:
         logger.error("order_cancelled_whatsapp_error", tenant_id=tenant_id, error=str(exc))
         return False
