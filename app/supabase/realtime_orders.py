@@ -31,6 +31,39 @@ _orders_watchers: dict[int, WebOrdersRealtimeWatcher] = {}
 _manager_running = False
 
 
+_sent_order_alerts: set[tuple[int, str, str]] = set()
+
+
+async def _already_sent_order_alert(db, tenant_id: int, order_number: str, alert_type: str) -> bool:
+    """Deduplicate notifications per order number so multiple events don't spam the customer."""
+    if not order_number or str(order_number).strip() in ("", "—"):
+        return False
+    key = (tenant_id, str(order_number).strip(), alert_type)
+    if key in _sent_order_alerts:
+        return True
+
+    from app.db.models import MessageLog
+    from sqlalchemy import select
+
+    phrase = f"#{order_number}*"
+    match_phrase = "CONFIRMED" if alert_type == "confirmed" else ("PENDING" if alert_type == "pending" else "CANCELLED")
+
+    try:
+        stmt = select(MessageLog.id).where(
+            MessageLog.tenant_id == tenant_id,
+            MessageLog.body_or_summary.contains(phrase),
+            MessageLog.body_or_summary.contains(match_phrase),
+        ).limit(1)
+        res = await db.execute(stmt)
+        if res.scalar_one_or_none() is not None:
+            _sent_order_alerts.add(key)
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 async def _get_tenant_store_name(db, tenant_id: int) -> str:
     from app.db.models import Tenant
     try:
@@ -65,6 +98,10 @@ async def send_order_confirmation_whatsapp(order: dict[str, Any], tenant_id: int
 
         factory = get_session_factory()
         async with factory() as db:
+            if await _already_sent_order_alert(db, tenant_id, order_number, "confirmed"):
+                logger.info("order_confirmation_already_sent", tenant_id=tenant_id, order_number=order_number)
+                return True
+
             store_name = await _get_tenant_store_name(db, tenant_id)
 
             message_body = (
@@ -89,6 +126,8 @@ async def send_order_confirmation_whatsapp(order: dict[str, Any], tenant_id: int
                 bypass_window=True,
             )
             await db.commit()
+            if result.status == "sent":
+                _sent_order_alerts.add((tenant_id, str(order_number).strip(), "confirmed"))
             logger.info(
                 "order_confirmation_whatsapp_sent",
                 tenant_id=tenant_id,
@@ -129,6 +168,10 @@ async def send_order_pending_whatsapp(order: dict[str, Any], tenant_id: int = 1)
 
         factory = get_session_factory()
         async with factory() as db:
+            if await _already_sent_order_alert(db, tenant_id, order_number, "pending"):
+                logger.info("order_pending_already_sent", tenant_id=tenant_id, order_number=order_number)
+                return True
+
             store_name = await _get_tenant_store_name(db, tenant_id)
 
             message_body = (
@@ -151,6 +194,8 @@ async def send_order_pending_whatsapp(order: dict[str, Any], tenant_id: int = 1)
                 bypass_window=True,
             )
             await db.commit()
+            if result.status == "sent":
+                _sent_order_alerts.add((tenant_id, str(order_number).strip(), "pending"))
             logger.info(
                 "order_pending_whatsapp_sent",
                 tenant_id=tenant_id,
@@ -181,6 +226,9 @@ async def send_order_cancelled_whatsapp(order: dict[str, Any], tenant_id: int = 
 
         factory = get_session_factory()
         async with factory() as db:
+            if await _already_sent_order_alert(db, tenant_id, order_number, "cancelled"):
+                return True
+
             store_name = await _get_tenant_store_name(db, tenant_id)
 
             message_body = (
@@ -202,6 +250,8 @@ async def send_order_cancelled_whatsapp(order: dict[str, Any], tenant_id: int = 
                 bypass_window=True,
             )
             await db.commit()
+            if result.status == "sent":
+                _sent_order_alerts.add((tenant_id, str(order_number).strip(), "cancelled"))
             return result.status == "sent"
     except Exception as exc:
         logger.error("order_cancelled_whatsapp_error", tenant_id=tenant_id, error=str(exc))
@@ -227,15 +277,20 @@ async def handle_order_update_event(
         new_status=new_status,
     )
 
-    if event_type == "INSERT":
-        if new_status == "confirmed":
-            return await send_order_confirmation_whatsapp(record, tenant_id=tenant_id)
+    # 1. 'reserved' is temporary cart stock hold before checkout is placed — never send WhatsApp messages for reserved
+    if new_status == "reserved":
+        return False
+
+    # 2. 'confirmed' — send confirmation message with confirmation code
+    if new_status == "confirmed":
+        return await send_order_confirmation_whatsapp(record, tenant_id=tenant_id)
+
+    # 3. 'pending' — order placed by customer, awaiting store verification
+    if new_status == "pending":
         return await send_order_pending_whatsapp(record, tenant_id=tenant_id)
 
-    # UPDATE events
-    if old_status != "confirmed" and new_status == "confirmed":
-        return await send_order_confirmation_whatsapp(record, tenant_id=tenant_id)
-    elif old_status != "cancelled" and new_status == "cancelled":
+    # 4. 'cancelled' — order cancelled
+    if new_status == "cancelled":
         return await send_order_cancelled_whatsapp(record, tenant_id=tenant_id)
 
     return False
